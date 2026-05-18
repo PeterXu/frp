@@ -163,10 +163,12 @@ func (h *SOCKS5Handler) socks5Auth(conn net.Conn) (string, error) {
 		return "", fmt.Errorf("auth failed for user [%s]", string(username))
 	}
 
-	conn.Write([]byte{0x01, 0x00}) // auth success
 	if len(username) == 0 {
+		conn.Write([]byte{0x01, 0x01}) // auth failure
 		return "", fmt.Errorf("empty username")
 	}
+
+	conn.Write([]byte{0x01, 0x00}) // auth success
 	return string(username), nil
 }
 
