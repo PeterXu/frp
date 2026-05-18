@@ -58,6 +58,15 @@ type ServerConfig struct {
 	TCPMuxHTTPConnectPort int `json:"tcpmuxHTTPConnectPort,omitempty"`
 	// If TCPMuxPassthrough is true, frps won't do any update on traffic.
 	TCPMuxPassthrough bool `json:"tcpmuxPassthrough,omitempty"`
+	// SOCKS5 proxy listener port, 0 means disabled
+	Socks5ProxyPort int `json:"socks5ProxyPort,omitempty"`
+	// SOCKS5 proxy authentication password
+	Socks5ProxyAuthPassword string `json:"socks5ProxyAuthPassword,omitempty"`
+
+	// HTTP CONNECT proxy listener port, 0 means disabled
+	HTTPConnectProxyPort int `json:"httpConnectProxyPort,omitempty"`
+	// HTTP CONNECT proxy authentication password
+	HTTPConnectProxyAuthPassword string `json:"httpConnectProxyAuthPassword,omitempty"`
 	// SubDomainHost specifies the domain that will be attached to sub-domains
 	// requested by the client when using Vhost proxying. For example, if this
 	// value is set to "frps.com" and the client requested the subdomain

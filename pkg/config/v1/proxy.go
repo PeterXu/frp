@@ -235,7 +235,8 @@ const (
 	ProxyTypeHTTPS  ProxyType = "https"
 	ProxyTypeSTCP   ProxyType = "stcp"
 	ProxyTypeXTCP   ProxyType = "xtcp"
-	ProxyTypeSUDP   ProxyType = "sudp"
+	ProxyTypeSUDP       ProxyType = "sudp"
+	ProxyTypeSocks5Relay ProxyType = "socks5_relay"
 )
 
 var proxyConfigTypeMap = map[ProxyType]reflect.Type{
@@ -246,7 +247,8 @@ var proxyConfigTypeMap = map[ProxyType]reflect.Type{
 	ProxyTypeTCPMUX: reflect.TypeFor[TCPMuxProxyConfig](),
 	ProxyTypeSTCP:   reflect.TypeFor[STCPProxyConfig](),
 	ProxyTypeXTCP:   reflect.TypeFor[XTCPProxyConfig](),
-	ProxyTypeSUDP:   reflect.TypeFor[SUDPProxyConfig](),
+	ProxyTypeSUDP:        reflect.TypeFor[SUDPProxyConfig](),
+	ProxyTypeSocks5Relay: reflect.TypeFor[Socks5RelayProxyConfig](),
 }
 
 func NewProxyConfigurerByType(proxyType ProxyType) ProxyConfigurer {
@@ -530,5 +532,44 @@ func (c *SUDPProxyConfig) Clone() ProxyConfigurer {
 	out := *c
 	out.ProxyBaseConfig = c.ProxyBaseConfig.Clone()
 	out.AllowUsers = slices.Clone(c.AllowUsers)
+	return &out
+}
+
+var _ ProxyConfigurer = &Socks5RelayProxyConfig{}
+
+type Socks5RelayProxyConfig struct {
+	ProxyBaseConfig
+
+	Group         string `json:"group,omitempty"`
+	GroupKey      string `json:"groupKey,omitempty"`
+	OutboundProxy string `json:"outboundProxy,omitempty"`
+}
+
+func (c *Socks5RelayProxyConfig) MarshalToMsg(m *msg.NewProxy) {
+	c.ProxyBaseConfig.MarshalToMsg(m)
+
+	m.Group = c.Group
+	m.GroupKey = c.GroupKey
+	if c.OutboundProxy != "" {
+		if m.Metas == nil {
+			m.Metas = make(map[string]string)
+		}
+		m.Metas["outboundProxy"] = c.OutboundProxy
+	}
+}
+
+func (c *Socks5RelayProxyConfig) UnmarshalFromMsg(m *msg.NewProxy) {
+	c.ProxyBaseConfig.UnmarshalFromMsg(m)
+
+	c.Group = m.Group
+	c.GroupKey = m.GroupKey
+	if m.Metas != nil {
+		c.OutboundProxy = m.Metas["outboundProxy"]
+	}
+}
+
+func (c *Socks5RelayProxyConfig) Clone() ProxyConfigurer {
+	out := *c
+	out.ProxyBaseConfig = c.ProxyBaseConfig.Clone()
 	return &out
 }
