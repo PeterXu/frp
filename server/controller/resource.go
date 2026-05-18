@@ -70,9 +70,10 @@ type ResourceController struct {
 
 // Socks5GroupRegistry manages socks5_relay group → frpc runID mappings.
 type Socks5GroupRegistry interface {
-	Register(group, runID string)
+	Register(group, runID, proxyName string)
 	Unregister(runID string)
 	GetGroupMembers(group string) []string
+	GetProxyName(runID string) string
 }
 
 // Socks5SessionManager manages socks5_relay session cleanup.

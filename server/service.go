@@ -899,7 +899,7 @@ func (svr *Service) RegisterVisitorConn(visitorConn net.Conn, newMsg *msg.NewVis
 
 func (svr *Service) makeSelectFrpcFn() func(username string, dstAddr string, dstPort uint16) (net.Conn, error) {
 	return func(username string, dstAddr string, dstPort uint16) (net.Conn, error) {
-		ctl, err := svr.sessionManager.SelectFrpc(username)
+		ctl, proxyName, err := svr.sessionManager.SelectFrpc(username)
 		if err != nil {
 			return nil, err
 		}
@@ -908,8 +908,9 @@ func (svr *Service) makeSelectFrpcFn() func(username string, dstAddr string, dst
 			return nil, fmt.Errorf("get work connection error: %w", err)
 		}
 		conn, err := workConn.Start(&msg.StartWorkConn{
-			DstAddr: dstAddr,
-			DstPort: dstPort,
+			ProxyName: proxyName,
+			DstAddr:   dstAddr,
+			DstPort:   dstPort,
 		})
 		if err != nil {
 			workConn.Close()
