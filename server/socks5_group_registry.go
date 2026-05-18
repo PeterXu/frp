@@ -12,19 +12,21 @@ import "sync"
 
 // Socks5RelayGroupRegistry tracks which frpc instances (by runID) belong to which groups.
 type Socks5RelayGroupRegistry struct {
-	groups      map[string]map[string]struct{} // group -> set of runIDs
-	runIDGroups map[string]map[string]struct{} // runID -> set of groups (reverse index)
-	mu          sync.RWMutex
+	groups         map[string]map[string]struct{} // group -> set of runIDs
+	runIDGroups    map[string]map[string]struct{} // runID -> set of groups (reverse index)
+	runIDProxyName map[string]string              // runID -> proxyName (for dispatch)
+	mu             sync.RWMutex
 }
 
 func NewSocks5RelayGroupRegistry() *Socks5RelayGroupRegistry {
 	return &Socks5RelayGroupRegistry{
-		groups:      make(map[string]map[string]struct{}),
-		runIDGroups: make(map[string]map[string]struct{}),
+		groups:         make(map[string]map[string]struct{}),
+		runIDGroups:    make(map[string]map[string]struct{}),
+		runIDProxyName: make(map[string]string),
 	}
 }
 
-func (r *Socks5RelayGroupRegistry) Register(group, runID string) {
+func (r *Socks5RelayGroupRegistry) Register(group, runID, proxyName string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -37,6 +39,7 @@ func (r *Socks5RelayGroupRegistry) Register(group, runID string) {
 		r.runIDGroups[runID] = make(map[string]struct{})
 	}
 	r.runIDGroups[runID][group] = struct{}{}
+	r.runIDProxyName[runID] = proxyName
 }
 
 func (r *Socks5RelayGroupRegistry) Unregister(runID string) {
@@ -56,6 +59,13 @@ func (r *Socks5RelayGroupRegistry) Unregister(runID string) {
 		}
 	}
 	delete(r.runIDGroups, runID)
+	delete(r.runIDProxyName, runID)
+}
+
+func (r *Socks5RelayGroupRegistry) GetProxyName(runID string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.runIDProxyName[runID]
 }
 
 func (r *Socks5RelayGroupRegistry) GetGroupMembers(group string) []string {

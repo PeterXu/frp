@@ -35,7 +35,8 @@ func NewSessionManager(groupRegistry *Socks5RelayGroupRegistry, ctlManager *Cont
 // SelectFrpc selects a frpc Control for the given username (= group name).
 // Uses session affinity: if the username was previously bound to a live frpc, return it.
 // Otherwise, select a new frpc via round-robin from the group.
-func (sm *SessionManager) SelectFrpc(username string) (*Control, error) {
+// Returns the Control and the proxyName needed for work connection dispatch.
+func (sm *SessionManager) SelectFrpc(username string) (*Control, string, error) {
 	sm.mu.RLock()
 	boundRunID, hasBinding := sm.sessions[username]
 	sm.mu.RUnlock()
@@ -43,13 +44,14 @@ func (sm *SessionManager) SelectFrpc(username string) (*Control, error) {
 	if hasBinding {
 		ctl, ok := sm.ctlManager.GetByID(boundRunID)
 		if ok {
-			return ctl, nil
+			proxyName := sm.groupRegistry.GetProxyName(boundRunID)
+			return ctl, proxyName, nil
 		}
 	}
 
 	members := sm.groupRegistry.GetGroupMembers(username)
 	if len(members) == 0 {
-		return nil, fmt.Errorf("no available frpc in group [%s]", username)
+		return nil, "", fmt.Errorf("no available frpc in group [%s]", username)
 	}
 
 	sm.mu.Lock()
@@ -65,14 +67,15 @@ func (sm *SessionManager) SelectFrpc(username string) (*Control, error) {
 
 	ctl, ok := sm.ctlManager.GetByID(runID)
 	if !ok {
-		return nil, fmt.Errorf("selected frpc [%s] is not available", runID)
+		return nil, "", fmt.Errorf("selected frpc [%s] is not available", runID)
 	}
 
 	sm.mu.Lock()
 	sm.sessions[username] = runID
 	sm.mu.Unlock()
 
-	return ctl, nil
+	proxyName := sm.groupRegistry.GetProxyName(runID)
+	return ctl, proxyName, nil
 }
 
 // RemoveSession removes all session bindings for a given runID (called on frpc disconnect).

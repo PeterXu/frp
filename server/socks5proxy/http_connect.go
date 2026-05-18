@@ -11,6 +11,7 @@ package socks5proxy
 import (
 	"bufio"
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"net"
@@ -142,7 +143,7 @@ func (h *HTTPConnectHandler) extractUsername(req *http.Request) (string, error) 
 		return "", fmt.Errorf("invalid auth format")
 	}
 
-	if parts[1] != h.authPassword {
+	if subtle.ConstantTimeCompare([]byte(parts[1]), []byte(h.authPassword)) != 1 {
 		return "", fmt.Errorf("auth failed")
 	}
 
