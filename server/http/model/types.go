@@ -96,6 +96,11 @@ type XTCPOutConf struct {
 	BaseOutConf
 }
 
+type Socks5RelayOutConf struct {
+	BaseOutConf
+	Group string `json:"group"`
+}
+
 // Get proxy info.
 type ProxyStatsInfo struct {
 	Name            string `json:"name"`

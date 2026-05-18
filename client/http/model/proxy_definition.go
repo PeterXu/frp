@@ -18,7 +18,8 @@ type ProxyDefinition struct {
 	TCPMux *v1.TCPMuxProxyConfig `json:"tcpmux,omitempty"`
 	STCP   *v1.STCPProxyConfig   `json:"stcp,omitempty"`
 	SUDP   *v1.SUDPProxyConfig   `json:"sudp,omitempty"`
-	XTCP   *v1.XTCPProxyConfig   `json:"xtcp,omitempty"`
+	XTCP       *v1.XTCPProxyConfig       `json:"xtcp,omitempty"`
+	Socks5Relay *v1.Socks5RelayProxyConfig `json:"socks5_relay,omitempty"`
 }
 
 func (p *ProxyDefinition) Validate(pathName string, isUpdate bool) error {
@@ -82,6 +83,8 @@ func ProxyDefinitionFromConfigurer(cfg v1.ProxyConfigurer) (ProxyDefinition, err
 		payload.SUDP = c
 	case *v1.XTCPProxyConfig:
 		payload.XTCP = c
+	case *v1.Socks5RelayProxyConfig:
+		payload.Socks5Relay = c
 	default:
 		return ProxyDefinition{}, fmt.Errorf("unsupported proxy configurer type %T", cfg)
 	}
@@ -134,13 +137,18 @@ func (p *ProxyDefinition) activeBlock() (v1.ProxyConfigurer, string, int) {
 		block = p.XTCP
 		blockType = "xtcp"
 	}
+	if p.Socks5Relay != nil {
+		count++
+		block = p.Socks5Relay
+		blockType = "socks5_relay"
+	}
 
 	return block, blockType, count
 }
 
 func IsProxyType(typ string) bool {
 	switch typ {
-	case "tcp", "udp", "http", "https", "tcpmux", "stcp", "sudp", "xtcp":
+	case "tcp", "udp", "http", "https", "tcpmux", "stcp", "sudp", "xtcp", "socks5_relay":
 		return true
 	default:
 		return false
