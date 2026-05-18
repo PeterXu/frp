@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	libio "github.com/fatedier/golib/io"
@@ -97,8 +98,12 @@ func (h *HTTPConnectHandler) handleConn(ctx context.Context, conn net.Conn) {
 		http.Error(newRespWriter(conn), "invalid host", http.StatusBadRequest)
 		return
 	}
-	var port uint16
-	fmt.Sscanf(portStr, "%d", &port)
+	parsedPort, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		http.Error(newRespWriter(conn), "invalid port", http.StatusBadRequest)
+		return
+	}
+	port := uint16(parsedPort)
 
 	// Select frpc and get work connection
 	workConn, err := h.selectFrpcFn(username, host, port)
@@ -141,6 +146,10 @@ func (h *HTTPConnectHandler) extractUsername(req *http.Request) (string, error) 
 	parts := strings.SplitN(string(decoded), ":", 2)
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid auth format")
+	}
+
+	if parts[0] == "" {
+		return "", fmt.Errorf("empty username")
 	}
 
 	if subtle.ConstantTimeCompare([]byte(parts[1]), []byte(h.authPassword)) != 1 {
