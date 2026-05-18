@@ -55,6 +55,7 @@ import (
 	"github.com/fatedier/frp/server/ports"
 	"github.com/fatedier/frp/server/proxy"
 	"github.com/fatedier/frp/server/registry"
+	"github.com/fatedier/frp/server/socks5proxy"
 	"github.com/fatedier/frp/server/visitor"
 )
 
@@ -119,6 +120,14 @@ type Service struct {
 	webServer *httppkg.Server
 
 	sshTunnelGateway *ssh.Gateway
+
+	// SOCKS5/HTTP CONNECT proxy handlers
+	socks5Handler      *socks5proxy.SOCKS5Handler
+	httpConnectHandler *socks5proxy.HTTPConnectHandler
+
+	// SOCKS5 relay session components
+	groupRegistry  *Socks5RelayGroupRegistry
+	sessionManager *SessionManager
 
 	// Auth runtime and encryption materials
 	auth *auth.ServerAuth
@@ -215,6 +224,12 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 	// Init TCP mux group controller
 	svr.rc.TCPMuxGroupCtl = group.NewTCPMuxGroupCtl(svr.rc.TCPMuxHTTPConnectMuxer)
 
+	// Initialize SOCKS5 relay components
+	svr.groupRegistry = NewSocks5RelayGroupRegistry()
+	svr.sessionManager = NewSessionManager(svr.groupRegistry, svr.ctlManager)
+	svr.rc.Socks5RelayGroupRegistry = svr.groupRegistry
+	svr.rc.Socks5SessionManager = svr.sessionManager
+
 	// Init 404 not found page
 	vhost.NotFoundPagePath = cfg.Custom404Page
 
@@ -280,6 +295,28 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		}
 		svr.sshTunnelGateway = sshGateway
 		log.Infof("frps sshTunnelGateway listen on port %d", cfg.SSHTunnelGateway.BindPort)
+	}
+
+	// SOCKS5 proxy listener
+	if cfg.Socks5ProxyPort > 0 {
+		address := net.JoinHostPort(cfg.ProxyBindAddr, strconv.Itoa(cfg.Socks5ProxyPort))
+		l, err := net.Listen("tcp", address)
+		if err != nil {
+			return nil, fmt.Errorf("create socks5 proxy listener error: %v", err)
+		}
+		svr.socks5Handler = socks5proxy.NewSOCKS5Handler(l, cfg.Socks5ProxyAuthPassword, svr.makeSelectFrpcFn())
+		log.Infof("socks5 proxy listen on %s", address)
+	}
+
+	// HTTP CONNECT proxy listener
+	if cfg.HTTPConnectProxyPort > 0 {
+		address := net.JoinHostPort(cfg.ProxyBindAddr, strconv.Itoa(cfg.HTTPConnectProxyPort))
+		l, err := net.Listen("tcp", address)
+		if err != nil {
+			return nil, fmt.Errorf("create http connect proxy listener error: %v", err)
+		}
+		svr.httpConnectHandler = socks5proxy.NewHTTPConnectHandler(l, cfg.HTTPConnectProxyAuthPassword, svr.makeSelectFrpcFn())
+		log.Infof("http connect proxy listen on %s", address)
 	}
 
 	// Listen for accepting connections from client using websocket protocol.
@@ -389,6 +426,13 @@ func (svr *Service) Run(ctx context.Context) {
 		go svr.sshTunnelGateway.Run()
 	}
 
+	if svr.socks5Handler != nil {
+		go svr.socks5Handler.Run(svr.ctx)
+	}
+	if svr.httpConnectHandler != nil {
+		go svr.httpConnectHandler.Run(svr.ctx)
+	}
+
 	svr.HandleListener(svr.listener, false)
 
 	<-svr.ctx.Done()
@@ -422,6 +466,12 @@ func (svr *Service) Close() error {
 	}
 	if svr.sshTunnelGateway != nil {
 		svr.sshTunnelGateway.Close()
+	}
+	if svr.socks5Handler != nil {
+		svr.socks5Handler.Close()
+	}
+	if svr.httpConnectHandler != nil {
+		svr.httpConnectHandler.Close()
 	}
 	svr.rc.Close()
 	svr.muxer.Close()
@@ -845,4 +895,26 @@ func (svr *Service) RegisterVisitorConn(visitorConn net.Conn, newMsg *msg.NewVis
 	}
 	return svr.rc.VisitorManager.NewConn(newMsg.ProxyName, visitorConn, newMsg.Timestamp, newMsg.SignKey,
 		newMsg.UseEncryption, newMsg.UseCompression, visitorUser)
+}
+
+func (svr *Service) makeSelectFrpcFn() func(username string, dstAddr string, dstPort uint16) (net.Conn, error) {
+	return func(username string, dstAddr string, dstPort uint16) (net.Conn, error) {
+		ctl, err := svr.sessionManager.SelectFrpc(username)
+		if err != nil {
+			return nil, err
+		}
+		workConn, err := ctl.GetWorkConn()
+		if err != nil {
+			return nil, fmt.Errorf("get work connection error: %w", err)
+		}
+		conn, err := workConn.Start(&msg.StartWorkConn{
+			DstAddr: dstAddr,
+			DstPort: dstPort,
+		})
+		if err != nil {
+			workConn.Close()
+			return nil, fmt.Errorf("start work connection error: %w", err)
+		}
+		return conn, nil
+	}
 }
