@@ -73,7 +73,7 @@ type Socks5GroupRegistry interface {
 	Register(group, runID, proxyName string)
 	Unregister(runID string)
 	GetGroupMembers(group string) []string
-	GetProxyName(runID string) string
+	GetProxyName(group, runID string) string
 }
 
 // Socks5SessionManager manages socks5_relay session cleanup.

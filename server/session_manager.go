@@ -44,7 +44,7 @@ func (sm *SessionManager) SelectFrpc(username string) (*Control, string, error) 
 	if hasBinding {
 		ctl, ok := sm.ctlManager.GetByID(boundRunID)
 		if ok {
-			proxyName := sm.groupRegistry.GetProxyName(boundRunID)
+			proxyName := sm.groupRegistry.GetProxyName(username, boundRunID)
 			return ctl, proxyName, nil
 		}
 	}
@@ -74,7 +74,7 @@ func (sm *SessionManager) SelectFrpc(username string) (*Control, string, error) 
 	sm.sessions[username] = runID
 	sm.mu.Unlock()
 
-	proxyName := sm.groupRegistry.GetProxyName(runID)
+	proxyName := sm.groupRegistry.GetProxyName(username, runID)
 	return ctl, proxyName, nil
 }
 
