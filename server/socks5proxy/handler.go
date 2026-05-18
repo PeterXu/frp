@@ -164,6 +164,9 @@ func (h *SOCKS5Handler) socks5Auth(conn net.Conn) (string, error) {
 	}
 
 	conn.Write([]byte{0x01, 0x00}) // auth success
+	if len(username) == 0 {
+		return "", fmt.Errorf("empty username")
+	}
 	return string(username), nil
 }
 
