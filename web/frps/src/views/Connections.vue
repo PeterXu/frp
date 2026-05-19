@@ -91,7 +91,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import ActionButton from '@shared/components/ActionButton.vue'
 import { getSocks5RelayConnections, getSocks5RelayStats } from '../api/socks5relay'
-import type { RelayConnectionInfo, RelayConnectionStats } from '../types/socks5relay'
+import type { RelayConnectionInfo, RelayConnectionStats, RelayConnectionEvent } from '../types/socks5relay'
 import { formatFileSize } from '../utils/format'
 
 const connections = ref<RelayConnectionInfo[]>([])
@@ -145,16 +145,99 @@ const fetchData = async () => {
   await Promise.all([fetchStats(), fetchConnections()])
 }
 
+// Handle SSE connection events
+const handleConnectionEvent = (event: RelayConnectionEvent) => {
+  switch (event.type) {
+    case 'created':
+      // Add new connection to the list
+      connections.value.push(event.conn)
+      // Update stats
+      stats.value.totalConnections++
+      stats.value.totalBytesIn += event.conn.bytesIn
+      stats.value.totalBytesOut += event.conn.bytesOut
+      break
+    case 'updated':
+      // Update existing connection
+      const index = connections.value.findIndex(c => c.id === event.conn.id)
+      if (index !== -1) {
+        const oldConn = connections.value[index]
+        connections.value[index] = event.conn
+        // Update stats deltas
+        stats.value.totalBytesIn += event.conn.bytesIn - oldConn.bytesIn
+        stats.value.totalBytesOut += event.conn.bytesOut - oldConn.bytesOut
+      }
+      break
+    case 'deleted':
+      // Remove connection from list
+      connections.value = connections.value.filter(c => c.id !== event.conn.id)
+      // Update stats
+      stats.value.totalConnections = Math.max(0, stats.value.totalConnections - 1)
+      stats.value.totalBytesIn = Math.max(0, stats.value.totalBytesIn - event.conn.bytesIn)
+      stats.value.totalBytesOut = Math.max(0, stats.value.totalBytesOut - event.conn.bytesOut)
+      break
+  }
+}
+
+let eventSource: EventSource | null = null
 let refreshTimer: number | null = null
 
-onMounted(() => {
-  fetchData()
+onMounted(async () => {
+  // Load initial data
+  await fetchData()
+
+  // Set up SSE connection
+  const eventsUrl = '../api/socks5relay/events'
+  eventSource = new EventSource(eventsUrl)
+
+  eventSource.addEventListener('connected', () => {
+    console.log('SSE connected')
+  })
+
+  eventSource.addEventListener('created', (e) => {
+    try {
+      const event = JSON.parse(e.data) as RelayConnectionEvent
+      handleConnectionEvent({ ...event, type: 'created' })
+    } catch (err) {
+      console.error('Failed to parse created event:', err)
+    }
+  })
+
+  eventSource.addEventListener('updated', (e) => {
+    try {
+      const event = JSON.parse(e.data) as RelayConnectionEvent
+      handleConnectionEvent({ ...event, type: 'updated' })
+    } catch (err) {
+      console.error('Failed to parse updated event:', err)
+    }
+  })
+
+  eventSource.addEventListener('deleted', (e) => {
+    try {
+      const event = JSON.parse(e.data) as RelayConnectionEvent
+      handleConnectionEvent({ ...event, type: 'deleted' })
+    } catch (err) {
+      console.error('Failed to parse deleted event:', err)
+    }
+  })
+
+  eventSource.onerror = (err) => {
+    console.error('SSE error:', err)
+    // Fall back to polling on error
+    if (refreshTimer === null) {
+      refreshTimer = window.setInterval(fetchData, 3000)
+    }
+  }
+
+  // Also set up periodic full refresh as fallback
   refreshTimer = window.setInterval(() => {
     fetchData()
-  }, 3000) // 3 second refresh
+  }, 30000) // 30 second fallback refresh
 })
 
 onUnmounted(() => {
+  if (eventSource) {
+    eventSource.close()
+  }
   if (refreshTimer !== null) {
     window.clearInterval(refreshTimer)
   }
