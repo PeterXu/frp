@@ -15,6 +15,9 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -52,6 +55,7 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	subRouter.HandleFunc("/api/socks5relay/sessions", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelaySessions)).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/connections", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayConnections)).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/stats", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayStats)).Methods("GET")
+	subRouter.HandleFunc("/api/socks5relay/events", svr.apiSocks5RelayEvents).Methods("GET")
 
 	// view
 	subRouter.Handle("/favicon.ico", http.FileServer(helper.AssetsFS)).Methods("GET")
@@ -136,4 +140,53 @@ func (svr *Service) apiSocks5RelayStats(ctx *httppkg.Context) (any, error) {
 		stats.TotalBytesOut += c.BytesOut
 	}
 	return stats, nil
+}
+
+// apiSocks5RelayEvents is a Server-Sent Events endpoint that streams connection events.
+func (svr *Service) apiSocks5RelayEvents(w http.ResponseWriter, r *http.Request) {
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Create context for this connection
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// Flush headers
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// Subscribe to connection events
+	eventCh := svr.connTracker.Subscribe(ctx)
+	defer flusher.Flush()
+
+	// Send initial connected event
+	fmt.Fprintf(w, "event: connected\ndata: {}\n\n")
+	flusher.Flush()
+
+	// Stream events to client
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-eventCh:
+			if !ok {
+				return
+			}
+
+			// Convert event to SSE format
+			data, err := json.Marshal(event)
+			if err != nil {
+				continue
+			}
+
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data)
+			flusher.Flush()
+		}
+	}
 }

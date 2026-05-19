@@ -33,3 +33,10 @@ export interface RelayConnectionStats {
   totalBytesIn: number
   totalBytesOut: number
 }
+
+export type RelayEventType = 'created' | 'updated' | 'deleted' | 'connected'
+
+export interface RelayConnectionEvent {
+  type: RelayEventType
+  conn: RelayConnectionInfo
+}
