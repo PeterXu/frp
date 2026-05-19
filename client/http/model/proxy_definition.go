@@ -11,14 +11,14 @@ type ProxyDefinition struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
 
-	TCP    *v1.TCPProxyConfig    `json:"tcp,omitempty"`
-	UDP    *v1.UDPProxyConfig    `json:"udp,omitempty"`
-	HTTP   *v1.HTTPProxyConfig   `json:"http,omitempty"`
-	HTTPS  *v1.HTTPSProxyConfig  `json:"https,omitempty"`
-	TCPMux *v1.TCPMuxProxyConfig `json:"tcpmux,omitempty"`
-	STCP   *v1.STCPProxyConfig   `json:"stcp,omitempty"`
-	SUDP   *v1.SUDPProxyConfig   `json:"sudp,omitempty"`
-	XTCP       *v1.XTCPProxyConfig       `json:"xtcp,omitempty"`
+	TCP         *v1.TCPProxyConfig         `json:"tcp,omitempty"`
+	UDP         *v1.UDPProxyConfig         `json:"udp,omitempty"`
+	HTTP        *v1.HTTPProxyConfig        `json:"http,omitempty"`
+	HTTPS       *v1.HTTPSProxyConfig       `json:"https,omitempty"`
+	TCPMux      *v1.TCPMuxProxyConfig      `json:"tcpmux,omitempty"`
+	STCP        *v1.STCPProxyConfig        `json:"stcp,omitempty"`
+	SUDP        *v1.SUDPProxyConfig        `json:"sudp,omitempty"`
+	XTCP        *v1.XTCPProxyConfig        `json:"xtcp,omitempty"`
 	Socks5Relay *v1.Socks5RelayProxyConfig `json:"socks5_relay,omitempty"`
 }
 

@@ -28,39 +28,57 @@ type RelayConnInfo struct {
 	ProxyName string
 	RunID     string
 	StartTime time.Time
+	EndTime   *time.Time // nil if active, set if closed
 	BytesIn   int64
 	BytesOut  int64
+	IsActive  bool // true for active connections, false for closed
 }
 
 // RelayConnEvent represents a connection lifecycle event.
 type RelayConnEvent struct {
-	Type  string        `json:"type"` // "created", "updated", "deleted"
-	Conn  RelayConnInfo `json:"conn"`
+	Type string        `json:"type"` // "created", "updated", "deleted"
+	Conn RelayConnInfo `json:"conn"`
 }
 
 // RelayConnTracker tracks active relay connections with thread-safe operations.
 type RelayConnTracker struct {
-	connections map[string]*RelayConnInfo
-	mu          sync.RWMutex
-	nextID      atomic.Uint64
+	connections       map[string]*RelayConnInfo
+	closedConnections map[string]*RelayConnInfo // Recently closed connections
+	mu                sync.RWMutex
+	nextID            atomic.Uint64
+
+	// Retention duration for closed connections
+	retentionDuration time.Duration
 
 	// Event broadcasting
 	subscribers map[chan<- RelayConnEvent]struct{}
 	subMu       sync.RWMutex
+
+	// Cleanup context
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewRelayConnTracker creates a new connection tracker.
-func NewRelayConnTracker() *RelayConnTracker {
-	return &RelayConnTracker{
-		connections: make(map[string]*RelayConnInfo),
-		subscribers: make(map[chan<- RelayConnEvent]struct{}),
+func NewRelayConnTracker(retentionDuration time.Duration) *RelayConnTracker {
+	ctx, cancel := context.WithCancel(context.Background())
+	tracker := &RelayConnTracker{
+		connections:       make(map[string]*RelayConnInfo),
+		closedConnections: make(map[string]*RelayConnInfo),
+		retentionDuration: retentionDuration,
+		subscribers:       make(map[chan<- RelayConnEvent]struct{}),
+		ctx:               ctx,
+		cancel:            cancel,
 	}
+	go tracker.cleanupLoop()
+	return tracker
 }
 
 // Track registers a new connection and returns its unique ID.
 func (t *RelayConnTracker) Track(info RelayConnInfo) string {
 	id := fmt.Sprintf("conn-%d", t.nextID.Add(1))
 	info.ID = id
+	info.IsActive = true
 
 	t.mu.Lock()
 	t.connections[id] = &info
@@ -82,14 +100,20 @@ func (t *RelayConnTracker) UpdateBytes(id string, bytesIn, bytesOut int64) {
 	}
 }
 
-// Remove removes a connection from the tracker.
+// Remove removes a connection from the tracker and moves it to closed connections.
 func (t *RelayConnTracker) Remove(id string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if conn, ok := t.connections[id]; ok {
 		delete(t.connections, id)
-		t.broadcast(RelayConnEvent{Type: "deleted", Conn: *conn})
+		// Mark as closed and move to closed connections
+		connCopy := *conn
+		now := time.Now()
+		connCopy.EndTime = &now
+		connCopy.IsActive = false
+		t.closedConnections[id] = &connCopy
+		t.broadcast(RelayConnEvent{Type: "deleted", Conn: connCopy})
 	}
 }
 
@@ -103,6 +127,49 @@ func (t *RelayConnTracker) GetAll() []RelayConnInfo {
 		result = append(result, *conn)
 	}
 	return result
+}
+
+// GetAllIncludingClosed returns both active and recently closed connections.
+func (t *RelayConnTracker) GetAllIncludingClosed() []RelayConnInfo {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	result := make([]RelayConnInfo, 0, len(t.connections)+len(t.closedConnections))
+	for _, conn := range t.connections {
+		result = append(result, *conn)
+	}
+	for _, conn := range t.closedConnections {
+		result = append(result, *conn)
+	}
+	return result
+}
+
+// cleanupLoop periodically removes old closed connections.
+func (t *RelayConnTracker) cleanupLoop() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-t.ctx.Done():
+			return
+		case <-ticker.C:
+			t.cleanupOldConnections()
+		}
+	}
+}
+
+// cleanupOldConnections removes closed connections older than retention duration.
+func (t *RelayConnTracker) cleanupOldConnections() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	cutoff := time.Now().Add(-t.retentionDuration)
+	for id, conn := range t.closedConnections {
+		if conn.EndTime != nil && conn.EndTime.Before(cutoff) {
+			delete(t.closedConnections, id)
+		}
+	}
 }
 
 // Subscribe registers a channel to receive connection events.
@@ -149,4 +216,9 @@ func (t *RelayConnTracker) broadcast(event RelayConnEvent) {
 func (e RelayConnEvent) MarshalJSON() ([]byte, error) {
 	type alias RelayConnEvent
 	return json.Marshal((*alias)(&e))
+}
+
+// Close stops the cleanup goroutine and releases resources.
+func (t *RelayConnTracker) Close() {
+	t.cancel()
 }

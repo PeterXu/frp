@@ -24,8 +24,10 @@ export interface RelayConnectionInfo {
   proxyName: string
   runID: string
   startTime: number
+  endTime?: number   // unix timestamp, undefined for active connections
   bytesIn: number
   bytesOut: number
+  isActive: boolean  // true for active connections, false for closed
 }
 
 export interface RelayConnectionStats {

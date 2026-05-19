@@ -18,8 +18,8 @@ import (
 
 	libio "github.com/fatedier/golib/io"
 
-	"github.com/fatedier/frp/pkg/util/xlog"
 	netpkg "github.com/fatedier/frp/pkg/util/net"
+	"github.com/fatedier/frp/pkg/util/xlog"
 )
 
 // SOCKS5Handler is a server-level SOCKS5 proxy listener.
