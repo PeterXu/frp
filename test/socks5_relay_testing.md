@@ -176,6 +176,25 @@ curl http://127.0.0.1:17500/api/socks5relay/stats \
   -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq
 ```
 
+### Retention Settings
+```bash
+# Get current retention
+curl http://127.0.0.1:17500/api/socks5relay/retention \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq
+
+# Set retention to 5 minutes
+curl -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+  -H "Content-Type: application/json" \
+  -d '{"retentionSeconds": 300}' | jq
+
+# Disable retention (no closed connections stored)
+curl -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+  -H "Content-Type: application/json" \
+  -d '{"retentionSeconds": 0}' | jq
+```
+
 ## Concurrent Connection Testing
 
 ```bash
@@ -191,9 +210,111 @@ curl http://127.0.0.1:17500/api/socks5relay/stats \
   -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq
 ```
 
-## Troubleshooting
+## New Features Testing
 
-### Dashboard Shows "No Active Connections"
+### Recent Connections (Closed Connections)
+
+Test that closed connections are retained and displayed:
+
+```bash
+# Set retention to 1 minute for quick testing
+curl -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+  -H "Content-Type: application/json" \
+  -d '{"retentionSeconds": 60}'
+
+# Make a connection (completes quickly)
+curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com
+
+# Check connections - should show in "Recent" tab
+curl http://127.0.0.1:17500/api/socks5relay/connections \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq '.[] | {id, isActive, endTime}'
+```
+
+Expected output: Connection with `isActive: false` and `endTime` timestamp.
+
+### Retention Adjustment
+
+Test runtime retention changes:
+
+```bash
+# Make some connections
+for i in {1..3}; do
+  curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com &
+done
+wait
+
+# Check count
+echo "Connections before cleanup:"
+curl http://127.0.0.1:17500/api/socks5relay/connections \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq '. | length'
+
+# Set retention to 0 (disable)
+curl -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+  -H "Content-Type: application/json" \
+  -d '{"retentionSeconds": 0}'
+
+# Check count again - should be 0 (or only active)
+echo "Connections after disabling retention:"
+curl http://127.0.0.1:17500/api/socks5relay/connections \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq '. | length'
+```
+
+### IPv6 Address Formatting
+
+Test IPv6 addresses are properly formatted:
+
+```bash
+# Use IPv6-only domain (resolves to IPv6)
+curl -x socks5://testgroup:testpass@127.0.0.1:10800 \
+  --ipv6 \
+  http://example.com
+
+# Check connection - should show [addr]:port format
+curl http://127.0.0.1:17500/api/socks5relay/connections \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq '.[-1] | {dstAddr, dstPort}'
+```
+
+Expected output for IPv6: `"dstAddr": "2606:2800:220:1:248:1893:25c8:1946"` (displayed as `[2606:2800:220:1:248:1893:25c8:1946]:80` in dashboard)
+
+### Domain vs IP Display
+
+Test difference between local DNS resolution and proxy-side DNS:
+
+```bash
+# Mode 1: Local DNS resolution (curl default)
+curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com
+# Dashboard shows: IP address like 93.184.216.34:80
+
+# Mode 2: Proxy-side DNS resolution
+curl --socks5-hostname testgroup:testpass@127.0.0.1:10800 http://example.com
+# Dashboard shows: example.com:80
+
+# Verify
+curl http://127.0.0.1:17500/api/socks5relay/connections \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq '.[-1].dstAddr'
+```
+
+### Retention Validation
+
+Test invalid retention values are rejected:
+
+```bash
+# Test negative value (should fail)
+curl -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+  -H "Content-Type: application/json" \
+  -d '{"retentionSeconds": -1}'
+
+# Test over 1 hour (should fail)
+curl -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+  -H "Content-Type: application/json" \
+  -d '{"retentionSeconds": 4000}'
+```
+
+Expected: Both return `{"Code":500,"Msg":"retentionSeconds must be between 0 and 3600"}`
 
 **Reason:** Connections complete too fast (~100ms)
 
@@ -259,12 +380,29 @@ group = "testgroup"
 
 ## Test Checklist
 
+### Basic Functionality
 - [ ] SOCKS5 proxy with HTTP
 - [ ] SOCKS5 proxy with HTTPS
 - [ ] HTTP CONNECT proxy with HTTPS
+- [ ] Both protocols visible in dashboard
+
+### Dashboard Features
 - [ ] Dashboard Connections view shows real-time updates
 - [ ] Dashboard Topology view displays correctly
 - [ ] SSE endpoint streams events
 - [ ] Multiple concurrent connections
 - [ ] Connection stats update correctly
-- [ ] Both protocols visible in dashboard
+
+### New Features (Recent Connections & Retention)
+- [ ] Recent connections tab displays closed connections
+- [ ] Retention adjustment via UI works
+- [ ] Retention API (GET/PUT) works correctly
+- [ ] Retention validates range (0-3600 seconds)
+- [ ] Retention = 0 clears closed connections immediately
+- [ ] Retention resets to default (10min) on restart
+
+### Address Display
+- [ ] IPv4 addresses display correctly (addr:port)
+- [ ] IPv6 addresses display correctly ([addr]:port)
+- [ ] Domain names display when using --socks5-hostname
+- [ ] IP addresses display when using -x (local DNS)

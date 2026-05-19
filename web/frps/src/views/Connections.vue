@@ -23,15 +23,15 @@
           <el-card class="status-card" shadow="hover">
             <div class="status-item">
               <div class="status-label">Active Connections</div>
-              <div class="status-value">{{ activeConnections.length }}</div>
+              <div class="status-value">{{ connectionStats.activeCount }}</div>
             </div>
           </el-card>
         </el-col>
         <el-col :xs="24" :sm="6">
-          <el-card class="status-card" shadow="hover">
+          <el-card class="status-card clickable" shadow="hover" @click="showRetentionDialog = true">
             <div class="status-item">
-              <div class="status-label">Recent (10min)</div>
-              <div class="status-value">{{ recentConnections.length }}</div>
+              <div class="status-label">Recent ({{ formatRetention(retentionSeconds) }})</div>
+              <div class="status-value">{{ connectionStats.recentCount }}</div>
             </div>
           </el-card>
         </el-col>
@@ -39,7 +39,7 @@
           <el-card class="status-card" shadow="hover">
             <div class="status-item">
               <div class="status-label">Total Bytes In</div>
-              <div class="status-value">{{ formatFileSize(activeStats.totalBytesIn) }}</div>
+              <div class="status-value">{{ formatFileSize(connectionStats.totalBytesIn) }}</div>
             </div>
           </el-card>
         </el-col>
@@ -47,7 +47,7 @@
           <el-card class="status-card" shadow="hover">
             <div class="status-item">
               <div class="status-label">Total Bytes Out</div>
-              <div class="status-value">{{ formatFileSize(activeStats.totalBytesOut) }}</div>
+              <div class="status-value">{{ formatFileSize(connectionStats.totalBytesOut) }}</div>
             </div>
           </el-card>
         </el-col>
@@ -72,7 +72,7 @@
                 <el-table-column prop="group" label="Group" width="120" />
                 <el-table-column label="Destination" width="200">
                   <template #default="{ row }">
-                    {{ row.dstAddr }}:{{ row.dstPort }}
+                    {{ formatDestination(row.dstAddr, row.dstPort) }}
                   </template>
                 </el-table-column>
                 <el-table-column prop="proxyName" label="Proxy" width="150" />
@@ -110,7 +110,7 @@
                 <el-table-column prop="group" label="Group" width="120" />
                 <el-table-column label="Destination" width="200">
                   <template #default="{ row }">
-                    {{ row.dstAddr }}:{{ row.dstPort }}
+                    {{ formatDestination(row.dstAddr, row.dstPort) }}
                   </template>
                 </el-table-column>
                 <el-table-column prop="proxyName" label="Proxy" width="150" />
@@ -138,6 +138,32 @@
         </el-tabs>
       </el-card>
     </div>
+
+    <!-- Retention Settings Dialog -->
+    <el-dialog v-model="showRetentionDialog" title="Connection Retention Settings" width="400px">
+      <el-form label-width="120px">
+        <el-form-item label="Retention Time">
+          <el-select v-model="tempRetention" placeholder="Select retention time">
+            <el-option label="Disabled (0s)" :value="0" />
+            <el-option label="1 minute" :value="60" />
+            <el-option label="5 minutes" :value="300" />
+            <el-option label="10 minutes (default)" :value="600" />
+            <el-option label="15 minutes" :value="900" />
+            <el-option label="30 minutes" :value="1800" />
+            <el-option label="1 hour" :value="3600" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-text type="info" size="small">
+            Closed connections are kept in memory for this duration. Resets to 10min on restart.
+          </el-text>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showRetentionDialog = false">Cancel</el-button>
+        <el-button type="primary" @click="updateRetention">Apply</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -145,7 +171,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import ActionButton from '@shared/components/ActionButton.vue'
-import { getSocks5RelayConnections } from '../api/socks5relay'
+import { getSocks5RelayConnections, getSocks5RelayRetention, setSocks5RelayRetention } from '../api/socks5relay'
 import type { RelayConnectionInfo } from '../types/socks5relay'
 import { formatFileSize } from '../utils/format'
 
@@ -153,6 +179,11 @@ const allConnections = ref<RelayConnectionInfo[]>([])
 const loading = ref(false)
 const autoRefresh = ref(true)
 const activeTab = ref('active')
+
+// Retention settings
+const retentionSeconds = ref(600) // Default 10 minutes
+const tempRetention = ref(600)
+const showRetentionDialog = ref(false)
 
 // Computed properties for splitting connections
 const activeConnections = computed(() => {
@@ -165,12 +196,13 @@ const recentConnections = computed(() => {
     .sort((a, b) => (b.endTime || 0) - (a.endTime || 0))
 })
 
-// Stats based on active connections only
-const activeStats = computed(() => {
+// Stats based on all connections (active + recent)
+const connectionStats = computed(() => {
   return {
-    totalConnections: activeConnections.value.length,
-    totalBytesIn: activeConnections.value.reduce((sum, c) => sum + c.bytesIn, 0),
-    totalBytesOut: activeConnections.value.reduce((sum, c) => sum + c.bytesOut, 0),
+    activeCount: activeConnections.value.length,
+    recentCount: recentConnections.value.length,
+    totalBytesIn: allConnections.value.reduce((sum, c) => sum + c.bytesIn, 0),
+    totalBytesOut: allConnections.value.reduce((sum, c) => sum + c.bytesOut, 0),
   }
 })
 
@@ -203,6 +235,7 @@ const fetchData = async () => {
   loading.value = true
   try {
     allConnections.value = await getSocks5RelayConnections()
+    await fetchRetention()
   } catch (error: any) {
     ElMessage({
       showClose: true,
@@ -211,6 +244,52 @@ const fetchData = async () => {
     })
   } finally {
     loading.value = false
+  }
+}
+
+const fetchRetention = async () => {
+  try {
+    const data = await getSocks5RelayRetention()
+    retentionSeconds.value = data.retentionSeconds
+    tempRetention.value = data.retentionSeconds
+  } catch (error: any) {
+    console.error('Failed to fetch retention setting:', error)
+  }
+}
+
+const formatRetention = (seconds: number): string => {
+  if (seconds === 0) return 'disabled'
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h`
+}
+
+const formatDestination = (addr: string, port: number): string => {
+  // IPv6 addresses contain colons, need to wrap in brackets
+  if (addr.includes(':')) {
+    return `[${addr}]:${port}`
+  }
+  return `${addr}:${port}`
+}
+
+const updateRetention = async () => {
+  try {
+    await setSocks5RelayRetention(tempRetention.value)
+    retentionSeconds.value = tempRetention.value
+    showRetentionDialog.value = false
+    ElMessage({
+      showClose: true,
+      message: 'Retention setting updated',
+      type: 'success',
+    })
+  } catch (error: any) {
+    ElMessage({
+      showClose: true,
+      message: 'Failed to update retention: ' + error.message,
+      type: 'error',
+    })
   }
 }
 
@@ -371,6 +450,19 @@ html.dark .status-card {
   font-size: 24px;
   font-weight: 500;
   color: var(--el-text-color-primary);
+}
+
+.clickable {
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.clickable:hover {
+  transform: translateY(-2px);
+}
+
+.clickable:active {
+  transform: translateY(0);
 }
 
 @media (max-width: 768px) {

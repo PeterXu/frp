@@ -78,11 +78,6 @@ if ! pgrep -f "bin/frpc" > /dev/null; then
 fi
 echo -e "${GREEN}✓ frpc running (PID: $FRPC_PID)${NC}"
 
-# Start slow server
-python3 "$SCRIPT_DIR/slow_server.py" --port 8766 --delay $((DELAY * 1000)) > /tmp/slow_server.log 2>&1 &
-SLOW_PID=$!
-sleep 1
-echo -e "${GREEN}✓ slow server running (PID: $SLOW_PID)${NC}"
 
 echo ""
 echo "=== Running Tests ==="
@@ -103,7 +98,7 @@ fi
 echo ""
 echo "Test 2: SOCKS5 Proxy"
 if curl -s -x socks5://testgroup:testpass@127.0.0.1:10800 \
-    --max-time 5 http://127.0.0.1:8766/ > /dev/null; then
+    --max-time 5 http://example.com > /dev/null; then
     echo -e "${GREEN}✓ SOCKS5 proxy working${NC}"
 else
     echo -e "${RED}✗ SOCKS5 proxy failed${NC}"
@@ -139,6 +134,63 @@ else
     echo -e "${RED}✗ SSE endpoint failed${NC}"
 fi
 
+# Test 5: Retention API
+echo ""
+echo "Test 5: Retention API"
+RETENTION=$(curl -s http://127.0.0.1:17500/api/socks5relay/retention \
+    -H "Authorization: Basic YWRtaW46YWRtaW4=")
+
+if echo "$RETENTION" | jq -e '.retentionSeconds >= 0' > /dev/null; then
+    echo -e "${GREEN}✓ Retention GET working${NC}"
+else
+    echo -e "${RED}✗ Retention GET failed${NC}"
+fi
+
+# Test setting retention
+SET_RESULT=$(curl -s -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
+    -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+    -H "Content-Type: application/json" \
+    -d '{"retentionSeconds": 300}')
+
+if echo "$SET_RESULT" | jq -e '.retentionSeconds == 300' > /dev/null; then
+    echo -e "${GREEN}✓ Retention PUT working${NC}"
+else
+    echo -e "${RED}✗ Retention PUT failed${NC}"
+fi
+
+# Reset to default
+curl -s -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
+    -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+    -H "Content-Type: application/json" \
+    -d '{"retentionSeconds": 600}' > /dev/null
+
+# Test 6: Recent Connections
+echo ""
+echo "Test 6: Recent Connections"
+
+# Make a connection that closes quickly
+curl -s -x socks5://testgroup:testpass@127.0.0.1:10800 \
+    http://example.com > /dev/null
+
+sleep 1
+
+CONNECTIONS=$(curl -s http://127.0.0.1:17500/api/socks5relay/connections \
+    -H "Authorization: Basic YWRtaW46YWRtaW4=")
+
+if echo "$CONNECTIONS" | jq -e '. | length > 0' > /dev/null; then
+    echo -e "${GREEN}✓ Connections API working${NC}"
+
+    # Check for closed connections
+    CLOSED_COUNT=$(echo "$CONNECTIONS" | jq '[.[] | select(.isActive == false)] | length')
+    if [ "$CLOSED_COUNT" -gt 0 ]; then
+        echo -e "${GREEN}✓ Recent (closed) connections tracked${NC}"
+    else
+        echo -e "${YELLOW}⚠ No closed connections (may have cleared already)${NC}"
+    fi
+else
+    echo -e "${RED}✗ Connections API failed${NC}"
+fi
+
 # Summary
 echo ""
 echo "=== Test Complete ==="
@@ -154,6 +206,6 @@ echo ""
 echo "Press Ctrl+C to stop services"
 
 # Wait for user interrupt
-trap "echo ''; echo 'Stopping services...'; kill $FRPS_PID $FRPC_PID $SLOW_PID 2>/dev/null; exit 0" INT
+trap "echo ''; echo 'Stopping services...'; kill $FRPS_PID $FRPC_PID 2>/dev/null; exit 0" INT
 
 wait

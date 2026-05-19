@@ -242,10 +242,71 @@ func (t *RelayConnTracker) broadcast(event RelayConnEvent) {
 	}
 }
 
-// MarshalJSON converts RelayConnInfo to JSON for SSE events.
+// MarshalJSON converts RelayConnEvent to JSON with Unix timestamps for SSE events.
 func (e RelayConnEvent) MarshalJSON() ([]byte, error) {
-	type alias RelayConnEvent
-	return json.Marshal((*alias)(&e))
+	type jsonAlias struct {
+		Type string `json:"type"`
+		Conn struct {
+			ID        string `json:"id"`
+			SourceIP  string `json:"sourceIP"`
+			Protocol  string `json:"protocol"`
+			Group     string `json:"group"`
+			DstAddr   string `json:"dstAddr"`
+			DstPort   int    `json:"dstPort"`
+			ProxyName string `json:"proxyName"`
+			RunID     string `json:"runID"`
+			StartTime int64  `json:"startTime"`
+			EndTime   *int64 `json:"endTime,omitempty"`
+			BytesIn   int64  `json:"bytesIn"`
+			BytesOut  int64  `json:"bytesOut"`
+			IsActive  bool   `json:"isActive"`
+		} `json:"conn"`
+	}
+
+	var endTime *int64
+	if e.Conn.EndTime != nil {
+		unix := e.Conn.EndTime.Unix()
+		endTime = &unix
+	}
+
+	result := jsonAlias{
+		Type: e.Type,
+	}
+	result.Conn.ID = e.Conn.ID
+	result.Conn.SourceIP = e.Conn.SourceIP
+	result.Conn.Protocol = e.Conn.Protocol
+	result.Conn.Group = e.Conn.Group
+	result.Conn.DstAddr = e.Conn.DstAddr
+	result.Conn.DstPort = int(e.Conn.DstPort)
+	result.Conn.ProxyName = e.Conn.ProxyName
+	result.Conn.RunID = e.Conn.RunID
+	result.Conn.StartTime = e.Conn.StartTime.Unix()
+	result.Conn.EndTime = endTime
+	result.Conn.BytesIn = e.Conn.BytesIn
+	result.Conn.BytesOut = e.Conn.BytesOut
+	result.Conn.IsActive = e.Conn.IsActive
+
+	return json.Marshal(result)
+}
+
+// SetRetentionDuration updates the retention duration.
+func (t *RelayConnTracker) SetRetentionDuration(duration time.Duration) {
+	t.mu.Lock()
+	t.retentionDuration = duration
+	if duration == 0 {
+		// Immediate cleanup when disabled
+		for id := range t.closedConnections {
+			delete(t.closedConnections, id)
+		}
+	}
+	t.mu.Unlock()
+}
+
+// GetRetentionDuration returns the current retention duration.
+func (t *RelayConnTracker) GetRetentionDuration() time.Duration {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.retentionDuration
 }
 
 // Close stops the cleanup goroutine and releases resources.

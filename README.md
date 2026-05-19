@@ -105,6 +105,7 @@ frp also offers a P2P connect mode.
     * [Client Plugins](#client-plugins)
     * [Server Manage Plugins](#server-manage-plugins)
     * [SSH Tunnel Gateway](#ssh-tunnel-gateway)
+    * [SOCKS5/HTTP CONNECT Relay Proxy](#socks5http-connect-relay-proxy)
     * [Virtual Network (VirtualNet)](#virtual-network-virtualnet)
 * [Feature Gates](#feature-gates)
     * [Available Feature Gates](#available-feature-gates)
@@ -1310,6 +1311,49 @@ frpc tcp --proxy_name "test-tcp" --local_ip 127.0.0.1 --local_port 8080 --remote
 ```
 
 Please refer to this [document](/doc/ssh_tunnel_gateway.md) for more information.
+
+### SOCKS5/HTTP CONNECT Relay Proxy
+
+*added in v0.53.0*
+
+frps supports SOCKS5 and HTTP CONNECT proxy protocols, allowing frpc instances to act as outbound proxies for external clients. Multiple frpcs can be grouped for load balancing with session affinity.
+
+```toml
+# frps.toml
+socks5ProxyPort = 10800
+socks5ProxyAuthPassword = "your_password"
+httpConnectProxyPort = 10801
+httpConnectProxyAuthPassword = "your_password"
+```
+
+When running `./frps -c frps.toml`, frps will listen on ports 10800 (SOCKS5) and 10801 (HTTP CONNECT) for proxy requests.
+
+Configure frpc with the `socks5_relay` proxy type:
+
+```toml
+# frpc.toml
+serverAddr = "x.x.x.x"
+serverPort = 7000
+
+[[proxies]]
+name = "relay-groupA"
+type = "socks5_relay"
+group = "groupA"
+```
+
+External clients can then connect through frps:
+
+```bash
+# SOCKS5
+curl -x socks5://groupA:your_password@frps-host:10800 https://example.com
+
+# HTTP CONNECT
+curl -x http://groupA:your_password@frps-host:10801 https://example.com
+```
+
+The dashboard includes a Connections view (`/connections`) that shows active and recently closed relay connections in real-time, with configurable retention period.
+
+Please refer to the [SOCKS5 Proxy Extension Design](/doc/socks5_proxy_extension/design.md) and [Testing Guide](/test/socks5_relay_testing.md) for more information.
 
 ### Virtual Network (VirtualNet)
 

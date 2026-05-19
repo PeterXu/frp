@@ -223,4 +223,38 @@ curl --socks5 groupA:pass@frps.example.com:1080 https://target.com/api
 
 # HTTP proxy
 curl --proxy http://groupA:pass@frps.example.com:8080 https://target.com/api
+
+# SOCKS5 with hostname (shows domain in dashboard)
+curl --socks5-hostname groupA:pass@frps.example.com:1080 https://target.com/api
+```
+
+---
+
+### Dashboard & Monitoring
+
+**Connections View** (`/connections`):
+- View active and recent (closed) connections
+- Real-time stats: active count, recent count, traffic totals
+- Adjustable retention period (default 10 minutes, configurable in UI)
+- Server-Sent Events (SSE) for live updates
+- IPv6 addresses displayed as `[addr]:port`
+- Domain names displayed when client uses SOCKS5 domain type
+
+**API Endpoints**:
+- `GET /api/socks5relay/connections` - List all connections
+- `GET /api/socks5relay/stats` - Aggregated statistics
+- `GET/PUT /api/socks5relay/retention` - View/change retention setting
+- `GET /api/socks5relay/events` - SSE event stream
+
+**Configuration** (frps.toml):
+```toml
+[webServer]
+addr = "127.0.0.1"
+port = 7500
+user = "admin"
+password = "admin"
+assetsDir = "./web/frps/dist"
+
+# Optional: connection retention (default 10min)
+# connRetentionDuration = 600  # seconds, 0 = disabled
 ```
