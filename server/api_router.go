@@ -50,6 +50,8 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	subRouter.HandleFunc("/api/proxies", httppkg.MakeHTTPHandlerFunc(apiController.DeleteProxies)).Methods("DELETE")
 	subRouter.HandleFunc("/api/socks5relay/groups", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayGroups)).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/sessions", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelaySessions)).Methods("GET")
+	subRouter.HandleFunc("/api/socks5relay/connections", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayConnections)).Methods("GET")
+	subRouter.HandleFunc("/api/socks5relay/stats", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayStats)).Methods("GET")
 
 	// view
 	subRouter.Handle("/favicon.ico", http.FileServer(helper.AssetsFS)).Methods("GET")
@@ -101,4 +103,37 @@ func (svr *Service) apiSocks5RelaySessions(ctx *httppkg.Context) (any, error) {
 		})
 	}
 	return resp, nil
+}
+
+func (svr *Service) apiSocks5RelayConnections(ctx *httppkg.Context) (any, error) {
+	conns := svr.connTracker.GetAll()
+	resp := make([]model.RelayConnectionInfo, 0, len(conns))
+	for _, c := range conns {
+		resp = append(resp, model.RelayConnectionInfo{
+			ID:        c.ID,
+			SourceIP:  c.SourceIP,
+			Protocol:  c.Protocol,
+			Group:     c.Group,
+			DstAddr:   c.DstAddr,
+			DstPort:   int(c.DstPort),
+			ProxyName: c.ProxyName,
+			RunID:     c.RunID,
+			StartTime: c.StartTime.Unix(),
+			BytesIn:   c.BytesIn,
+			BytesOut:  c.BytesOut,
+		})
+	}
+	return resp, nil
+}
+
+func (svr *Service) apiSocks5RelayStats(ctx *httppkg.Context) (any, error) {
+	conns := svr.connTracker.GetAll()
+	stats := model.RelayConnectionStats{
+		TotalConnections: len(conns),
+	}
+	for _, c := range conns {
+		stats.TotalBytesIn += c.BytesIn
+		stats.TotalBytesOut += c.BytesOut
+	}
+	return stats, nil
 }

@@ -128,6 +128,7 @@ type Service struct {
 	// SOCKS5 relay session components
 	groupRegistry  *Socks5RelayGroupRegistry
 	sessionManager *SessionManager
+	connTracker    *socks5proxy.RelayConnTracker
 
 	// Auth runtime and encryption materials
 	auth *auth.ServerAuth
@@ -227,6 +228,7 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 	// Initialize SOCKS5 relay components
 	svr.groupRegistry = NewSocks5RelayGroupRegistry()
 	svr.sessionManager = NewSessionManager(svr.groupRegistry, svr.ctlManager)
+	svr.connTracker = socks5proxy.NewRelayConnTracker()
 	svr.rc.Socks5RelayGroupRegistry = svr.groupRegistry
 	svr.rc.Socks5SessionManager = svr.sessionManager
 
@@ -304,7 +306,7 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		if err != nil {
 			return nil, fmt.Errorf("create socks5 proxy listener error: %v", err)
 		}
-		svr.socks5Handler = socks5proxy.NewSOCKS5Handler(l, cfg.Socks5ProxyAuthPassword, svr.makeSelectFrpcFn())
+		svr.socks5Handler = socks5proxy.NewSOCKS5Handler(l, cfg.Socks5ProxyAuthPassword, svr.makeSelectFrpcFn(), svr.makeGetConnMetaFn(), svr.connTracker)
 		log.Infof("socks5 proxy listen on %s", address)
 	}
 
@@ -315,7 +317,7 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		if err != nil {
 			return nil, fmt.Errorf("create http connect proxy listener error: %v", err)
 		}
-		svr.httpConnectHandler = socks5proxy.NewHTTPConnectHandler(l, cfg.HTTPConnectProxyAuthPassword, svr.makeSelectFrpcFn())
+		svr.httpConnectHandler = socks5proxy.NewHTTPConnectHandler(l, cfg.HTTPConnectProxyAuthPassword, svr.makeSelectFrpcFn(), svr.makeGetConnMetaFn(), svr.connTracker)
 		log.Infof("http connect proxy listen on %s", address)
 	}
 
@@ -917,5 +919,16 @@ func (svr *Service) makeSelectFrpcFn() func(username string, dstAddr string, dst
 			return nil, fmt.Errorf("start work connection error: %w", err)
 		}
 		return conn, nil
+	}
+}
+
+func (svr *Service) makeGetConnMetaFn() func(username string) (proxyName, runID string, err error) {
+	return func(username string) (proxyName, runID string, err error) {
+		ctl, proxyName, err := svr.sessionManager.SelectFrpc(username)
+		if err != nil {
+			return "", "", err
+		}
+		runID = ctl.runID
+		return proxyName, runID, nil
 	}
 }

@@ -14,10 +14,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	libio "github.com/fatedier/golib/io"
 
 	"github.com/fatedier/frp/pkg/util/xlog"
+	netpkg "github.com/fatedier/frp/pkg/util/net"
 )
 
 // SOCKS5Handler is a server-level SOCKS5 proxy listener.
@@ -25,13 +27,23 @@ type SOCKS5Handler struct {
 	listener     net.Listener
 	authPassword string
 	selectFrpcFn func(username string, dstAddr string, dstPort uint16) (net.Conn, error)
+	getMetaFn    func(username string) (proxyName, runID string, err error)
+	connTracker  *RelayConnTracker
 }
 
-func NewSOCKS5Handler(listener net.Listener, authPassword string, selectFrpcFn func(username string, dstAddr string, dstPort uint16) (net.Conn, error)) *SOCKS5Handler {
+func NewSOCKS5Handler(
+	listener net.Listener,
+	authPassword string,
+	selectFrpcFn func(username string, dstAddr string, dstPort uint16) (net.Conn, error),
+	getMetaFn func(username string) (proxyName, runID string, err error),
+	connTracker *RelayConnTracker,
+) *SOCKS5Handler {
 	return &SOCKS5Handler{
 		listener:     listener,
 		authPassword: authPassword,
 		selectFrpcFn: selectFrpcFn,
+		getMetaFn:    getMetaFn,
+		connTracker:  connTracker,
 	}
 }
 
@@ -91,6 +103,37 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 		return
 	}
 	defer workConn.Close()
+
+	// Get connection metadata
+	proxyName, runID, err := h.getMetaFn(username)
+	if err != nil {
+		xl.Warnf("get conn meta for group [%s] error: %v", username, err)
+		h.sendSOCKS5Reply(clientConn, 0x01)
+		return
+	}
+
+	// Register connection in tracker
+	connID := h.connTracker.Track(RelayConnInfo{
+		SourceIP:  clientConn.RemoteAddr().String(),
+		Protocol:  "socks5",
+		Group:     username,
+		DstAddr:   dstAddr,
+		DstPort:   dstPort,
+		ProxyName: proxyName,
+		RunID:     runID,
+		StartTime: time.Now(),
+		BytesIn:   0,
+		BytesOut:  0,
+	})
+	defer h.connTracker.Remove(connID)
+
+	// Wrap connections for byte tracking
+	clientConn = netpkg.WrapStatsConn(clientConn, func(read, write int64) {
+		h.connTracker.UpdateBytes(connID, read, write)
+	})
+	workConn = netpkg.WrapStatsConn(workConn, func(read, write int64) {
+		h.connTracker.UpdateBytes(connID, write, read) // reversed for workConn
+	})
 
 	// Send success reply to client
 	h.sendSOCKS5Reply(clientConn, 0x00)

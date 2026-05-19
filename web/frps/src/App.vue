@@ -88,6 +88,22 @@
           >
             SOCKS5 Relay
           </router-link>
+          <router-link
+            to="/topology"
+            class="sidebar-link"
+            :class="{ active: route.path.startsWith('/topology') }"
+            @click="closeSidebar"
+          >
+            Topology
+          </router-link>
+          <router-link
+            to="/connections"
+            class="sidebar-link"
+            :class="{ active: route.path.startsWith('/connections') }"
+            @click="closeSidebar"
+          >
+            Connections
+          </router-link>
         </nav>
       </aside>
 
