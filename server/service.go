@@ -481,6 +481,10 @@ func (svr *Service) Close() error {
 		svr.httpConnectHandler.Close()
 	}
 	svr.rc.Close()
+	// Close connection tracker to stop cleanup goroutine
+	if svr.connTracker != nil {
+		svr.connTracker.Close()
+	}
 	svr.muxer.Close()
 	svr.ctlManager.Close()
 	if svr.cancel != nil {

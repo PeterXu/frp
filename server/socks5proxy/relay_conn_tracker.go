@@ -102,17 +102,29 @@ func (t *RelayConnTracker) UpdateBytes(id string, bytesIn, bytesOut int64) {
 
 // Remove removes a connection from the tracker and moves it to closed connections.
 func (t *RelayConnTracker) Remove(id string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	var connCopy RelayConnInfo
+	var shouldBroadcast bool
 
+	t.mu.Lock()
 	if conn, ok := t.connections[id]; ok {
+		// Check if already in closedConnections to prevent duplicates
+		if _, exists := t.closedConnections[id]; exists {
+			t.mu.Unlock()
+			return
+		}
 		delete(t.connections, id)
 		// Mark as closed and move to closed connections
-		connCopy := *conn
+		connCopy = *conn
 		now := time.Now()
 		connCopy.EndTime = &now
 		connCopy.IsActive = false
 		t.closedConnections[id] = &connCopy
+		shouldBroadcast = true
+	}
+	t.mu.Unlock()
+
+	// Broadcast outside the lock to prevent blocking if subscribers are slow
+	if shouldBroadcast {
 		t.broadcast(RelayConnEvent{Type: "deleted", Conn: connCopy})
 	}
 }
@@ -164,10 +176,28 @@ func (t *RelayConnTracker) cleanupOldConnections() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// If retention is disabled (0), clear all closed connections immediately
+	if t.retentionDuration == 0 {
+		for id := range t.closedConnections {
+			delete(t.closedConnections, id)
+		}
+		return
+	}
+
 	cutoff := time.Now().Add(-t.retentionDuration)
 	for id, conn := range t.closedConnections {
 		if conn.EndTime != nil && conn.EndTime.Before(cutoff) {
 			delete(t.closedConnections, id)
+		}
+	}
+
+	// Early cleanup if map grows too large (prevent memory pressure under high churn)
+	if len(t.closedConnections) > 10000 {
+		cutoff := time.Now().Add(-time.Minute) // Force cleanup of older entries
+		for id, conn := range t.closedConnections {
+			if conn.EndTime != nil && conn.EndTime.Before(cutoff) {
+				delete(t.closedConnections, id)
+			}
 		}
 	}
 }
