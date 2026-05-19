@@ -190,6 +190,10 @@ type ServerTransportConfig struct {
 	QUIC QUICOptions `json:"quic,omitempty"`
 	// TLS specifies TLS settings for the connection from the client.
 	TLS TLSServerConfig `json:"tls,omitempty"`
+	// ProxyProtocol toggles reading PROXY protocol headers on the bind listener.
+	// Enable this when frps is behind a Layer 4 proxy (e.g., Nginx stream, HAProxy)
+	// that sends PROXY protocol headers. Disabled by default.
+	ProxyProtocol bool `json:"proxyProtocol,omitempty"`
 }
 
 func (c *ServerTransportConfig) Complete() {

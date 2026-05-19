@@ -51,6 +51,14 @@ bindPort = 7000
 # transport.tls.keyFile = "server.key"
 # transport.tls.trustedCaFile = "ca.crt"
 
+# Enable PROXY protocol when frps is behind a Layer 4 load balancer
+# (e.g., Nginx stream, HAProxy) that sends PROXY protocol headers.
+# This allows frps to see the real client IP instead of the proxy's IP.
+# Requires proxy_protocol on; in Nginx stream block.
+# IMPORTANT: bind frps to 127.0.0.1 or use a firewall to restrict access,
+# otherwise clients could send fake PROXY headers to spoof their IP.
+# transport.proxyProtocol = false
+
 # If you want to support virtual host, you must set the http port for listening (optional)
 # Note: http port and https port can be same with bindPort
 # vhostHTTPPort = 80

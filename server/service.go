@@ -30,6 +30,7 @@ import (
 	"github.com/fatedier/golib/net/mux"
 	fmux "github.com/hashicorp/yamux"
 	quic "github.com/quic-go/quic-go"
+	"github.com/pires/go-proxyproto"
 	"github.com/samber/lo"
 
 	"github.com/fatedier/frp/pkg/auth"
@@ -260,6 +261,10 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		return nil, fmt.Errorf("create server listener error, %v", err)
 	}
 
+	if cfg.Transport.ProxyProtocol {
+		ln = &proxyproto.Listener{Listener: ln}
+	}
+
 	svr.muxer = mux.NewMux(ln)
 	svr.muxer.SetKeepAlive(time.Duration(cfg.Transport.TCPKeepAlive) * time.Second)
 	go func() {
@@ -311,6 +316,9 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		if err != nil {
 			return nil, fmt.Errorf("create socks5 proxy listener error: %v", err)
 		}
+		if cfg.Transport.ProxyProtocol {
+			l = &proxyproto.Listener{Listener: l}
+		}
 		svr.socks5Handler = socks5proxy.NewSOCKS5Handler(l, cfg.Socks5ProxyAuthPassword, svr.makeSelectFrpcFn(), svr.makeGetConnMetaFn(), svr.connTracker)
 		log.Infof("socks5 proxy listen on %s", address)
 	}
@@ -321,6 +329,9 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		l, err := net.Listen("tcp", address)
 		if err != nil {
 			return nil, fmt.Errorf("create http connect proxy listener error: %v", err)
+		}
+		if cfg.Transport.ProxyProtocol {
+			l = &proxyproto.Listener{Listener: l}
 		}
 		svr.httpConnectHandler = socks5proxy.NewHTTPConnectHandler(l, cfg.HTTPConnectProxyAuthPassword, svr.makeSelectFrpcFn(), svr.makeGetConnMetaFn(), svr.connTracker)
 		log.Infof("http connect proxy listen on %s", address)
