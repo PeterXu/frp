@@ -11,6 +11,7 @@ package proxy
 import (
 	"fmt"
 	"net"
+	"os"
 	"reflect"
 	"strconv"
 	"time"
@@ -66,8 +67,17 @@ func (pxy *Socks5RelayProxy) InWorkConn(conn net.Conn, m *msg.StartWorkConn) {
 	var targetConn net.Conn
 	var err error
 
-	if pxy.cfg.OutboundProxy != "" {
-		targetConn, err = pxy.dialViaProxy(targetAddr)
+	proxyURL := pxy.cfg.OutboundProxy
+	if proxyURL == "" {
+		// Fallback: RELAY_PROXY environment variable (dedicated for socks5_relay)
+		proxyURL = os.Getenv("RELAY_PROXY")
+		if proxyURL == "" {
+			proxyURL = os.Getenv("relay_proxy")
+		}
+	}
+
+	if proxyURL != "" {
+		targetConn, err = pxy.dialViaProxyURL(targetAddr, proxyURL)
 	} else {
 		targetConn, err = libnet.Dial(targetAddr, libnet.WithTimeout(10*time.Second))
 	}
@@ -86,12 +96,11 @@ func (pxy *Socks5RelayProxy) Close() {
 	// nothing to clean up
 }
 
-// dialViaProxy dials the target address through the configured outbound proxy.
-// Uses the same libnet API that FRP uses for transport.proxyURL (see client/connector.go).
-func (pxy *Socks5RelayProxy) dialViaProxy(targetAddr string) (net.Conn, error) {
-	proxyType, addr, auth, err := libnet.ParseProxyURL(pxy.cfg.OutboundProxy)
+// dialViaProxyURL dials the target address through the specified proxy URL.
+func (pxy *Socks5RelayProxy) dialViaProxyURL(targetAddr string, proxyURL string) (net.Conn, error) {
+	proxyType, addr, auth, err := libnet.ParseProxyURL(proxyURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse outbound proxy URL error: %w", err)
+		return nil, fmt.Errorf("parse proxy URL %q error: %w", proxyURL, err)
 	}
 
 	return libnet.Dial(targetAddr,

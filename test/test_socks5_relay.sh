@@ -97,7 +97,7 @@ fi
 # Test 2: SOCKS5 Proxy
 echo ""
 echo "Test 2: SOCKS5 Proxy"
-if curl -s -x socks5://testgroup:testpass@127.0.0.1:10800 \
+if curl -s -x socks5h://testgroup:testpass@127.0.0.1:10800 \
     --max-time 5 http://example.com > /dev/null; then
     echo -e "${GREEN}✓ SOCKS5 proxy working${NC}"
 else
@@ -122,7 +122,7 @@ timeout 3 curl -s -N http://127.0.0.1:17500/api/socks5relay/events \
 SSE_PID=$!
 
 sleep 1
-curl -s -x socks5://testgroup:testpass@127.0.0.1:10800 \
+curl -s -x socks5h://testgroup:testpass@127.0.0.1:10800 \
     http://example.com > /dev/null
 
 sleep 2
@@ -169,7 +169,7 @@ echo ""
 echo "Test 6: Recent Connections"
 
 # Make a connection that closes quickly
-curl -s -x socks5://testgroup:testpass@127.0.0.1:10800 \
+curl -s -x socks5h://testgroup:testpass@127.0.0.1:10800 \
     http://example.com > /dev/null
 
 sleep 1
@@ -200,7 +200,7 @@ echo "  frps: http://127.0.0.1:17500/static/"
 echo "  Dashboard: http://127.0.0.1:17500/static/#/connections"
 echo ""
 echo "Test commands:"
-echo "  curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com"
+echo "  curl -x socks5h://testgroup:testpass@127.0.0.1:10800 http://example.com"
 echo "  curl -x http://testgroup:testpass@127.0.0.1:10801 https://example.com"
 echo ""
 echo "Press Ctrl+C to stop services"

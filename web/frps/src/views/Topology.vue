@@ -65,7 +65,7 @@
             </div>
             <div class="info-item">
               <span class="info-label">Dashboard</span>
-              <span class="info-value">:17500</span>
+              <span class="info-value">:{{ serverInfo.webServerPort }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Total Traffic</span>
@@ -140,6 +140,7 @@ const serverInfo = ref<ServerInfo>({
   proxyTypeCount: {},
   socks5ProxyPort: 0,
   httpConnectProxyPort: 0,
+  webServerPort: 0,
 })
 
 const groups = ref<Socks5RelayGroupInfo[]>([])

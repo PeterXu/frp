@@ -41,6 +41,7 @@ type ServerInfoResp struct {
 
 	Socks5ProxyPort      int `json:"socks5ProxyPort"`
 	HTTPConnectProxyPort int `json:"httpConnectProxyPort"`
+	WebServerPort        int `json:"webServerPort"`
 }
 
 type ClientInfoResp struct {

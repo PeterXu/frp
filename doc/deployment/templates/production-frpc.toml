@@ -273,7 +273,13 @@ remotePort = 6000
 # type = "socks5_relay"
 # group = "mygroup"
 # # groupKey = "optional-group-secret"
-# # outboundProxy = "optional-outbound-proxy-name"
+# # outboundProxy = "socks5://user:pass@proxy-host:port"
+# # outboundProxy = "http://user:pass@proxy-host:port"
+#
+# # Outbound proxy for target connections (fallback order):
+# #   1. outboundProxy config field
+# #   2. RELAY_PROXY / relay_proxy env var (dedicated for relay, won't affect frpc→frps)
+# #   3. Direct connection (no proxy)
 
 # ----------------------------------------------------------------------------
 # Bandwidth Limit
