@@ -59,24 +59,22 @@ protocol = "tcp"
 # dnsServer = "8.8.8.8"
 
 # TCP multiplexing (recommended, reduces connection overhead)
-[transport.tcpMux]
 tcpMux = true
+
 # TCP mux keepalive interval in seconds
 tcpMuxKeepaliveInterval = 60
 
-# Heartbeat configuration
-[transport.heartbeat]
 # Heartbeat interval in seconds (default: 30)
-interval = 30
+heartbeatInterval = 30
 
 # Heartbeat timeout in seconds (default: 90)
-timeout = 90
+heartbeatTimeout = 90
 
 # Dial server timeout in seconds
 dialServerTimeout = 10
 
 # Dial server keepalive in seconds
-dialServerKeepAlive = 60
+dialServerKeepalive = 60
 
 # ============================================================================
 # TLS Configuration (Recommended for Production)
@@ -264,6 +262,17 @@ remotePort = 6000
 # remotePort = 7000
 # useEncryption = true
 # useCompression = true
+
+# ----------------------------------------------------------------------------
+# SOCKS5 Relay Proxy
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "relay-proxy"
+# type = "socks5_relay"
+# group = "mygroup"
+# # groupKey = "optional-group-secret"
+# # outboundProxy = "optional-outbound-proxy-name"
 
 # ============================================================================
 # Visitor Configuration (For STCP/SUDP/XTCP)

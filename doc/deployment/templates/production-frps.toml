@@ -61,16 +61,15 @@ disablePrintColor = false
 # ============================================================================
 
 [transport]
-# TCP_mux configuration
-[transport.tcpMux]
 # Enable TCP multiplexing (default: true)
 tcpMux = true
 
-# Heartbeat configuration
-[transport.heartbeat]
+# TCP mux keepalive interval in seconds
+tcpMuxKeepaliveInterval = 30
+
 # Heartbeat timeout in seconds (default: 90)
 # If no heartbeat received within this time, connection is closed
-timeout = 90
+heartbeatTimeout = 90
 
 # ============================================================================
 # Features
@@ -84,8 +83,7 @@ enablePrometheus = true
 # ============================================================================
 
 # QUIC protocol support
-# [[quicBindPort]]
-# port = 7001
+# quicBindPort = 7001
 
 # KCP protocol support
 # kcpBindPort = 7000
