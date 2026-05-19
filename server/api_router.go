@@ -22,6 +22,7 @@ import (
 	httppkg "github.com/fatedier/frp/pkg/util/http"
 	netpkg "github.com/fatedier/frp/pkg/util/net"
 	adminapi "github.com/fatedier/frp/server/http"
+	"github.com/fatedier/frp/server/http/model"
 )
 
 func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) {
@@ -47,6 +48,8 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	subRouter.HandleFunc("/api/clients", httppkg.MakeHTTPHandlerFunc(apiController.APIClientList)).Methods("GET")
 	subRouter.HandleFunc("/api/clients/{key}", httppkg.MakeHTTPHandlerFunc(apiController.APIClientDetail)).Methods("GET")
 	subRouter.HandleFunc("/api/proxies", httppkg.MakeHTTPHandlerFunc(apiController.DeleteProxies)).Methods("DELETE")
+	subRouter.HandleFunc("/api/socks5relay/groups", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayGroups)).Methods("GET")
+	subRouter.HandleFunc("/api/socks5relay/sessions", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelaySessions)).Methods("GET")
 
 	// view
 	subRouter.Handle("/favicon.ico", http.FileServer(helper.AssetsFS)).Methods("GET")
@@ -61,4 +64,41 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(200)
+}
+
+func (svr *Service) apiSocks5RelayGroups(ctx *httppkg.Context) (any, error) {
+	groups := svr.groupRegistry.GetAllGroups(func(runID string) bool {
+		_, ok := svr.ctlManager.GetByID(runID)
+		return ok
+	})
+
+	resp := make([]model.Socks5RelayGroupInfo, 0, len(groups))
+	for _, group := range groups {
+		members := make([]model.Socks5RelayGroupMember, 0, len(group.Members))
+		for _, member := range group.Members {
+			members = append(members, model.Socks5RelayGroupMember{
+				RunID:     member.RunID,
+				ProxyName: member.ProxyName,
+				Online:    member.Online,
+			})
+		}
+		resp = append(resp, model.Socks5RelayGroupInfo{
+			Name:    group.Name,
+			Members: members,
+		})
+	}
+	return resp, nil
+}
+
+func (svr *Service) apiSocks5RelaySessions(ctx *httppkg.Context) (any, error) {
+	sessions := svr.sessionManager.GetAllSessions()
+
+	resp := make([]model.Socks5RelaySessionInfo, 0, len(sessions))
+	for username, runID := range sessions {
+		resp = append(resp, model.Socks5RelaySessionInfo{
+			Username: username,
+			RunID:    runID,
+		})
+	}
+	return resp, nil
 }

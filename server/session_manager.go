@@ -88,3 +88,14 @@ func (sm *SessionManager) RemoveSession(runID string) {
 		}
 	}
 }
+
+func (sm *SessionManager) GetAllSessions() map[string]string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	result := make(map[string]string, len(sm.sessions))
+	for username, runID := range sm.sessions {
+		result[username] = runID
+	}
+	return result
+}

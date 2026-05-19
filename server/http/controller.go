@@ -79,6 +79,9 @@ func (c *Controller) APIServerInfo(ctx *httppkg.Context) (any, error) {
 		CurConns:        serverStats.CurConns,
 		ClientCounts:    serverStats.ClientCounts,
 		ProxyTypeCounts: serverStats.ProxyTypeCounts,
+
+		Socks5ProxyPort:      c.serverCfg.Socks5ProxyPort,
+		HTTPConnectProxyPort: c.serverCfg.HTTPConnectProxyPort,
 	}
 
 	return svrResp, nil
