@@ -228,25 +228,25 @@ type ProxyConfigurer interface {
 type ProxyType string
 
 const (
-	ProxyTypeTCP    ProxyType = "tcp"
-	ProxyTypeUDP    ProxyType = "udp"
-	ProxyTypeTCPMUX ProxyType = "tcpmux"
-	ProxyTypeHTTP   ProxyType = "http"
-	ProxyTypeHTTPS  ProxyType = "https"
-	ProxyTypeSTCP   ProxyType = "stcp"
-	ProxyTypeXTCP   ProxyType = "xtcp"
-	ProxyTypeSUDP       ProxyType = "sudp"
+	ProxyTypeTCP         ProxyType = "tcp"
+	ProxyTypeUDP         ProxyType = "udp"
+	ProxyTypeTCPMUX      ProxyType = "tcpmux"
+	ProxyTypeHTTP        ProxyType = "http"
+	ProxyTypeHTTPS       ProxyType = "https"
+	ProxyTypeSTCP        ProxyType = "stcp"
+	ProxyTypeXTCP        ProxyType = "xtcp"
+	ProxyTypeSUDP        ProxyType = "sudp"
 	ProxyTypeSocks5Relay ProxyType = "socks5_relay"
 )
 
 var proxyConfigTypeMap = map[ProxyType]reflect.Type{
-	ProxyTypeTCP:    reflect.TypeFor[TCPProxyConfig](),
-	ProxyTypeUDP:    reflect.TypeFor[UDPProxyConfig](),
-	ProxyTypeHTTP:   reflect.TypeFor[HTTPProxyConfig](),
-	ProxyTypeHTTPS:  reflect.TypeFor[HTTPSProxyConfig](),
-	ProxyTypeTCPMUX: reflect.TypeFor[TCPMuxProxyConfig](),
-	ProxyTypeSTCP:   reflect.TypeFor[STCPProxyConfig](),
-	ProxyTypeXTCP:   reflect.TypeFor[XTCPProxyConfig](),
+	ProxyTypeTCP:         reflect.TypeFor[TCPProxyConfig](),
+	ProxyTypeUDP:         reflect.TypeFor[UDPProxyConfig](),
+	ProxyTypeHTTP:        reflect.TypeFor[HTTPProxyConfig](),
+	ProxyTypeHTTPS:       reflect.TypeFor[HTTPSProxyConfig](),
+	ProxyTypeTCPMUX:      reflect.TypeFor[TCPMuxProxyConfig](),
+	ProxyTypeSTCP:        reflect.TypeFor[STCPProxyConfig](),
+	ProxyTypeXTCP:        reflect.TypeFor[XTCPProxyConfig](),
 	ProxyTypeSUDP:        reflect.TypeFor[SUDPProxyConfig](),
 	ProxyTypeSocks5Relay: reflect.TypeFor[Socks5RelayProxyConfig](),
 }

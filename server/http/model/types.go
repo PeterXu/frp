@@ -105,8 +105,8 @@ type Socks5RelayOutConf struct {
 }
 
 type Socks5RelayGroupInfo struct {
-	Name    string                     `json:"name"`
-	Members []Socks5RelayGroupMember   `json:"members"`
+	Name    string                   `json:"name"`
+	Members []Socks5RelayGroupMember `json:"members"`
 }
 
 type Socks5RelayGroupMember struct {
@@ -121,17 +121,19 @@ type Socks5RelaySessionInfo struct {
 }
 
 type RelayConnectionInfo struct {
-	ID        string `json:"id"`
-	SourceIP  string `json:"sourceIP"`
-	Protocol  string `json:"protocol"`
-	Group     string `json:"group"`
-	DstAddr   string `json:"dstAddr"`
-	DstPort   int    `json:"dstPort"`
-	ProxyName string `json:"proxyName"`
-	RunID     string `json:"runID"`
-	StartTime int64  `json:"startTime"`
-	BytesIn   int64  `json:"bytesIn"`
-	BytesOut  int64  `json:"bytesOut"`
+	ID        string  `json:"id"`
+	SourceIP  string  `json:"sourceIP"`
+	Protocol  string  `json:"protocol"`
+	Group     string  `json:"group"`
+	DstAddr   string  `json:"dstAddr"`
+	DstPort   int     `json:"dstPort"`
+	ProxyName string  `json:"proxyName"`
+	RunID     string  `json:"runID"`
+	StartTime int64   `json:"startTime"`
+	EndTime   *int64  `json:"endTime,omitempty"`
+	BytesIn   int64   `json:"bytesIn"`
+	BytesOut  int64   `json:"bytesOut"`
+	IsActive  bool    `json:"isActive"`
 }
 
 type RelayConnectionStats struct {

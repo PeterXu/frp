@@ -3,12 +3,12 @@
     <div class="page-header">
       <div class="header-top">
         <div class="title-section">
-          <h1 class="page-title">Active Connections</h1>
-          <p class="page-subtitle">Real-time SOCKS5/HTTP CONNECT relay connections</p>
+          <h1 class="page-title">Connections</h1>
+          <p class="page-subtitle">Active and recent SOCKS5/HTTP CONNECT relay connections</p>
         </div>
 
         <div class="actions-section">
-          <el-tag v-if="autoRefresh" type="success" size="small">Auto-refreshing</el-tag>
+          <el-tag v-if="autoRefresh" type="success" size="small">Live</el-tag>
           <ActionButton variant="outline" size="small" @click="fetchData">
             Refresh
           </ActionButton>
@@ -19,93 +19,163 @@
     <!-- Stats Cards -->
     <div class="section">
       <el-row :gutter="16">
-        <el-col :xs="24" :sm="8">
+        <el-col :xs="24" :sm="6">
           <el-card class="status-card" shadow="hover">
             <div class="status-item">
-              <div class="status-label">Total Connections</div>
-              <div class="status-value">{{ stats.totalConnections }}</div>
+              <div class="status-label">Active Connections</div>
+              <div class="status-value">{{ activeConnections.length }}</div>
             </div>
           </el-card>
         </el-col>
-        <el-col :xs="24" :sm="8">
+        <el-col :xs="24" :sm="6">
+          <el-card class="status-card" shadow="hover">
+            <div class="status-item">
+              <div class="status-label">Recent (10min)</div>
+              <div class="status-value">{{ recentConnections.length }}</div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :sm="6">
           <el-card class="status-card" shadow="hover">
             <div class="status-item">
               <div class="status-label">Total Bytes In</div>
-              <div class="status-value">{{ formatFileSize(stats.totalBytesIn) }}</div>
+              <div class="status-value">{{ formatFileSize(activeStats.totalBytesIn) }}</div>
             </div>
           </el-card>
         </el-col>
-        <el-col :xs="24" :sm="8">
+        <el-col :xs="24" :sm="6">
           <el-card class="status-card" shadow="hover">
             <div class="status-item">
               <div class="status-label">Total Bytes Out</div>
-              <div class="status-value">{{ formatFileSize(stats.totalBytesOut) }}</div>
+              <div class="status-value">{{ formatFileSize(activeStats.totalBytesOut) }}</div>
             </div>
           </el-card>
         </el-col>
       </el-row>
     </div>
 
-    <!-- Connections Table -->
+    <!-- Connections Tabs -->
     <div class="section">
       <el-card v-loading="loading" shadow="hover">
-        <div v-if="connections.length > 0">
-          <el-table :data="connections">
-            <el-table-column prop="sourceIP" label="Source" width="180" />
-            <el-table-column prop="protocol" label="Protocol" width="120">
-              <template #default="{ row }">
-                <el-tag :type="row.protocol === 'socks5' ? 'primary' : 'success'" size="small">
-                  {{ row.protocol === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="group" label="Group" width="120" />
-            <el-table-column label="Destination" width="200">
-              <template #default="{ row }">
-                {{ row.dstAddr }}:{{ row.dstPort }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="proxyName" label="Proxy" width="150" />
-            <el-table-column label="Duration" width="120">
-              <template #default="{ row }">
-                {{ formatDuration(row.startTime) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="Traffic">
-              <template #default="{ row }">
-                ↓ {{ formatFileSize(row.bytesIn) }} / ↑ {{ formatFileSize(row.bytesOut) }}
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-        <div v-else-if="!loading">
-          <el-empty description="No active connections" />
-        </div>
+        <el-tabs v-model="activeTab">
+          <el-tab-pane label="Active Connections" name="active">
+            <div v-if="activeConnections.length > 0">
+              <el-table :data="activeConnections">
+                <el-table-column prop="sourceIP" label="Source" width="180" />
+                <el-table-column prop="protocol" label="Protocol" width="130">
+                  <template #default="{ row }">
+                    <el-tag :type="row.protocol === 'socks5' ? 'primary' : 'success'" size="small">
+                      {{ row.protocol === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="group" label="Group" width="120" />
+                <el-table-column label="Destination" width="200">
+                  <template #default="{ row }">
+                    {{ row.dstAddr }}:{{ row.dstPort }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="proxyName" label="Proxy" width="150" />
+                <el-table-column label="Duration" width="120">
+                  <template #default="{ row }">
+                    {{ formatDuration(row.startTime, null) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="Traffic">
+                  <template #default="{ row }">
+                    ↓ {{ formatFileSize(row.bytesIn) }} / ↑ {{ formatFileSize(row.bytesOut) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+            <div v-else-if="!loading">
+              <el-empty description="No active connections" />
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane name="recent">
+            <template #label>
+              Recent Connections <el-badge v-if="recentConnections.length > 0" :value="recentConnections.length" />
+            </template>
+            <div v-if="recentConnections.length > 0">
+              <el-table :data="recentConnections">
+                <el-table-column prop="sourceIP" label="Source" width="180" />
+                <el-table-column prop="protocol" label="Protocol" width="130">
+                  <template #default="{ row }">
+                    <el-tag :type="row.protocol === 'socks5' ? 'info' : 'warning'" size="small">
+                      {{ row.protocol === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="group" label="Group" width="120" />
+                <el-table-column label="Destination" width="200">
+                  <template #default="{ row }">
+                    {{ row.dstAddr }}:{{ row.dstPort }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="proxyName" label="Proxy" width="150" />
+                <el-table-column label="Duration" width="150">
+                  <template #default="{ row }">
+                    {{ formatDuration(row.startTime, row.endTime) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="Closed" width="120">
+                  <template #default="{ row }">
+                    {{ formatTimeAgo(row.endTime!) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="Traffic">
+                  <template #default="{ row }">
+                    ↓ {{ formatFileSize(row.bytesIn) }} / ↑ {{ formatFileSize(row.bytesOut) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+            <div v-else-if="!loading">
+              <el-empty description="No recent connections" />
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </el-card>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import ActionButton from '@shared/components/ActionButton.vue'
-import { getSocks5RelayConnections, getSocks5RelayStats } from '../api/socks5relay'
-import type { RelayConnectionInfo, RelayConnectionStats, RelayConnectionEvent } from '../types/socks5relay'
+import { getSocks5RelayConnections } from '../api/socks5relay'
+import type { RelayConnectionInfo } from '../types/socks5relay'
 import { formatFileSize } from '../utils/format'
 
-const connections = ref<RelayConnectionInfo[]>([])
-const stats = ref<RelayConnectionStats>({
-  totalConnections: 0,
-  totalBytesIn: 0,
-  totalBytesOut: 0,
-})
+const allConnections = ref<RelayConnectionInfo[]>([])
 const loading = ref(false)
 const autoRefresh = ref(true)
+const activeTab = ref('active')
 
-const formatDuration = (startTime: number): string => {
-  const now = Date.now()
-  const diff = now - startTime * 1000
+// Computed properties for splitting connections
+const activeConnections = computed(() => {
+  return allConnections.value.filter(c => c.isActive)
+})
+
+const recentConnections = computed(() => {
+  return allConnections.value.filter(c => !c.isActive)
+})
+
+// Stats based on active connections only
+const activeStats = computed(() => {
+  return {
+    totalConnections: activeConnections.value.length,
+    totalBytesIn: activeConnections.value.reduce((sum, c) => sum + c.bytesIn, 0),
+    totalBytesOut: activeConnections.value.reduce((sum, c) => sum + c.bytesOut, 0),
+  }
+})
+
+const formatDuration = (startTime: number, endTime: number | null): string => {
+  const start = startTime * 1000
+  const end = endTime ? endTime * 1000 : Date.now()
+  const diff = end - start
   const seconds = Math.floor(diff / 1000)
   if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
@@ -114,22 +184,23 @@ const formatDuration = (startTime: number): string => {
   return `${hours}h`
 }
 
-const fetchStats = async () => {
-  try {
-    stats.value = await getSocks5RelayStats()
-  } catch (error: any) {
-    ElMessage({
-      showClose: true,
-      message: 'Failed to fetch stats: ' + error.message,
-      type: 'error',
-    })
-  }
+const formatTimeAgo = (timestamp: number): string => {
+  const now = Date.now()
+  const diff = now - timestamp * 1000
+  const seconds = Math.floor(diff / 1000)
+
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
-const fetchConnections = async () => {
+const fetchData = async () => {
   loading.value = true
   try {
-    connections.value = await getSocks5RelayConnections()
+    allConnections.value = await getSocks5RelayConnections()
   } catch (error: any) {
     ElMessage({
       showClose: true,
@@ -141,48 +212,34 @@ const fetchConnections = async () => {
   }
 }
 
-const fetchData = async () => {
-  await Promise.all([fetchStats(), fetchConnections()])
-}
-
 // Handle SSE connection events
-const handleConnectionEvent = (event: RelayConnectionEvent) => {
-  switch (event.type) {
-    case 'created':
-      // Add new connection to the list
-      connections.value.push(event.conn)
-      // Update stats
-      stats.value.totalConnections++
-      stats.value.totalBytesIn += event.conn.bytesIn
-      stats.value.totalBytesOut += event.conn.bytesOut
-      break
-    case 'updated':
-      // Update existing connection
-      const index = connections.value.findIndex(c => c.id === event.conn.id)
-      if (index !== -1) {
-        const oldConn = connections.value[index]
-        connections.value[index] = event.conn
-        // Update stats deltas
-        stats.value.totalBytesIn += event.conn.bytesIn - oldConn.bytesIn
-        stats.value.totalBytesOut += event.conn.bytesOut - oldConn.bytesOut
-      }
-      break
-    case 'deleted':
-      // Remove connection from list
-      connections.value = connections.value.filter(c => c.id !== event.conn.id)
-      // Update stats
-      stats.value.totalConnections = Math.max(0, stats.value.totalConnections - 1)
-      stats.value.totalBytesIn = Math.max(0, stats.value.totalBytesIn - event.conn.bytesIn)
-      stats.value.totalBytesOut = Math.max(0, stats.value.totalBytesOut - event.conn.bytesOut)
-      break
+const handleConnectionEvent = (event: any) => {
+  const conn = event.conn
+
+  if (event.type === 'created') {
+    // Add new connection
+    const index = allConnections.value.findIndex(c => c.id === conn.id)
+    if (index === -1) {
+      allConnections.value.push(conn)
+    }
+  } else if (event.type === 'updated') {
+    // Update existing connection
+    const index = allConnections.value.findIndex(c => c.id === conn.id)
+    if (index !== -1) {
+      allConnections.value[index] = conn
+    }
+  } else if (event.type === 'deleted') {
+    // Move connection from active to recent
+    const index = allConnections.value.findIndex(c => c.id === conn.id)
+    if (index !== -1) {
+      allConnections.value[index] = conn
+    }
   }
 }
 
 let eventSource: EventSource | null = null
-let refreshTimer: number | null = null
 
 onMounted(async () => {
-  // Load initial data
   await fetchData()
 
   // Set up SSE connection
@@ -195,7 +252,7 @@ onMounted(async () => {
 
   eventSource.addEventListener('created', (e) => {
     try {
-      const event = JSON.parse(e.data) as RelayConnectionEvent
+      const event = JSON.parse(e.data)
       handleConnectionEvent({ ...event, type: 'created' })
     } catch (err) {
       console.error('Failed to parse created event:', err)
@@ -204,7 +261,7 @@ onMounted(async () => {
 
   eventSource.addEventListener('updated', (e) => {
     try {
-      const event = JSON.parse(e.data) as RelayConnectionEvent
+      const event = JSON.parse(e.data)
       handleConnectionEvent({ ...event, type: 'updated' })
     } catch (err) {
       console.error('Failed to parse updated event:', err)
@@ -213,7 +270,7 @@ onMounted(async () => {
 
   eventSource.addEventListener('deleted', (e) => {
     try {
-      const event = JSON.parse(e.data) as RelayConnectionEvent
+      const event = JSON.parse(e.data)
       handleConnectionEvent({ ...event, type: 'deleted' })
     } catch (err) {
       console.error('Failed to parse deleted event:', err)
@@ -222,24 +279,15 @@ onMounted(async () => {
 
   eventSource.onerror = (err) => {
     console.error('SSE error:', err)
-    // Fall back to polling on error
-    if (refreshTimer === null) {
-      refreshTimer = window.setInterval(fetchData, 3000)
-    }
   }
 
-  // Also set up periodic full refresh as fallback
-  refreshTimer = window.setInterval(() => {
-    fetchData()
-  }, 30000) // 30 second fallback refresh
+  // Periodic refresh every 30 seconds as fallback
+  setInterval(fetchData, 30000)
 })
 
 onUnmounted(() => {
   if (eventSource) {
     eventSource.close()
-  }
-  if (refreshTimer !== null) {
-    window.clearInterval(refreshTimer)
   }
 })
 </script>

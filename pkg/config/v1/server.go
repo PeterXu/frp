@@ -67,6 +67,10 @@ type ServerConfig struct {
 	HTTPConnectProxyPort int `json:"httpConnectProxyPort,omitempty"`
 	// HTTP CONNECT proxy authentication password
 	HTTPConnectProxyAuthPassword string `json:"httpConnectProxyAuthPassword,omitempty"`
+	// ConnRetentionDuration specifies how long to keep closed connections in memory
+	// for display in the dashboard. Default is 10 minutes. Set to 0 to disable keeping
+	// closed connections.
+	ConnRetentionDuration int64 `json:"connRetentionDuration,omitempty"`
 	// SubDomainHost specifies the domain that will be attached to sub-domains
 	// requested by the client when using Vhost proxying. For example, if this
 	// value is set to "frps.com" and the client requested the subdomain

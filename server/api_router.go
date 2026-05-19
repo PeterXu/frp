@@ -110,9 +110,14 @@ func (svr *Service) apiSocks5RelaySessions(ctx *httppkg.Context) (any, error) {
 }
 
 func (svr *Service) apiSocks5RelayConnections(ctx *httppkg.Context) (any, error) {
-	conns := svr.connTracker.GetAll()
+	conns := svr.connTracker.GetAllIncludingClosed()
 	resp := make([]model.RelayConnectionInfo, 0, len(conns))
 	for _, c := range conns {
+		var endTime *int64
+		if c.EndTime != nil {
+			unix := c.EndTime.Unix()
+			endTime = &unix
+		}
 		resp = append(resp, model.RelayConnectionInfo{
 			ID:        c.ID,
 			SourceIP:  c.SourceIP,
@@ -123,8 +128,10 @@ func (svr *Service) apiSocks5RelayConnections(ctx *httppkg.Context) (any, error)
 			ProxyName: c.ProxyName,
 			RunID:     c.RunID,
 			StartTime: c.StartTime.Unix(),
+			EndTime:   endTime,
 			BytesIn:   c.BytesIn,
 			BytesOut:  c.BytesOut,
+			IsActive:  c.IsActive,
 		})
 	}
 	return resp, nil

@@ -24,8 +24,8 @@ import (
 
 	libio "github.com/fatedier/golib/io"
 
-	"github.com/fatedier/frp/pkg/util/xlog"
 	netpkg "github.com/fatedier/frp/pkg/util/net"
+	"github.com/fatedier/frp/pkg/util/xlog"
 )
 
 // HTTPConnectHandler is a server-level HTTP CONNECT proxy listener.
@@ -229,7 +229,7 @@ func newRespWriter(conn net.Conn) *respWriter {
 	return &respWriter{conn: conn, header: make(http.Header)}
 }
 
-func (w *respWriter) Header() http.Header        { return w.header }
+func (w *respWriter) Header() http.Header         { return w.header }
 func (w *respWriter) Write(b []byte) (int, error) { return w.conn.Write(b) }
 func (w *respWriter) WriteHeader(code int) {
 	if w.wrote {
@@ -247,5 +247,5 @@ type bufferedConn struct {
 	net.Conn
 }
 
-func (b *bufferedConn) Read(p []byte) (int, error)  { return b.Reader.Read(p) }
-func (b *bufferedConn) Close() error                 { return b.Conn.Close() }
+func (b *bufferedConn) Read(p []byte) (int, error) { return b.Reader.Read(p) }
+func (b *bufferedConn) Close() error               { return b.Conn.Close() }

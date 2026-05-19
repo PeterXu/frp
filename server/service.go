@@ -228,7 +228,12 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 	// Initialize SOCKS5 relay components
 	svr.groupRegistry = NewSocks5RelayGroupRegistry()
 	svr.sessionManager = NewSessionManager(svr.groupRegistry, svr.ctlManager)
-	svr.connTracker = socks5proxy.NewRelayConnTracker()
+	// Default to 10 minutes retention if not specified (0 = disabled)
+	retentionDuration := time.Duration(cfg.ConnRetentionDuration) * time.Second
+	if cfg.ConnRetentionDuration == 0 {
+		retentionDuration = 10 * time.Minute
+	}
+	svr.connTracker = socks5proxy.NewRelayConnTracker(retentionDuration)
 	svr.rc.Socks5RelayGroupRegistry = svr.groupRegistry
 	svr.rc.Socks5SessionManager = svr.sessionManager
 
