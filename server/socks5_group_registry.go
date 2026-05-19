@@ -8,7 +8,11 @@
 
 package server
 
-import "sync"
+import (
+	"cmp"
+	"slices"
+	"sync"
+)
 
 // Socks5RelayGroupRegistry tracks which frpc instances (by runID) belong to which groups.
 type Socks5RelayGroupRegistry struct {
@@ -116,5 +120,10 @@ func (r *Socks5RelayGroupRegistry) GetAllGroups(onlineFn func(runID string) bool
 		}
 		result = append(result, detail)
 	}
+
+	slices.SortFunc(result, func(a, b GroupDetail) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+
 	return result
 }
