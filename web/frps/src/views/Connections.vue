@@ -160,7 +160,9 @@ const activeConnections = computed(() => {
 })
 
 const recentConnections = computed(() => {
-  return allConnections.value.filter(c => !c.isActive)
+  return allConnections.value
+    .filter(c => !c.isActive)
+    .sort((a, b) => (b.endTime || 0) - (a.endTime || 0))
 })
 
 // Stats based on active connections only
