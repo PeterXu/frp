@@ -114,6 +114,7 @@ import {
   TCPMuxProxy,
   STCPProxy,
   SUDPProxy,
+  Socks5RelayProxy,
 } from '../utils/proxy'
 import ProxyCard from '../components/ProxyCard.vue'
 import PopoverMenu from '@shared/components/PopoverMenu.vue'
@@ -139,6 +140,7 @@ const proxyTypes = [
   { label: 'STCP', value: 'stcp' },
   { label: 'XTCP', value: 'xtcp' },
   { label: 'SUDP', value: 'sudp' },
+  { label: 'SOCKS5 RELAY', value: 'socks5_relay' },
 ]
 
 const activeType = ref((route.params.type as string) || 'tcp')
@@ -329,6 +331,9 @@ const convertProxies = async (
   if (type === 'sudp') {
     return json.proxies.map((p: any) => new SUDPProxy(p))
   }
+  if (type === 'socks5_relay') {
+    return json.proxies.map((p: any) => new Socks5RelayProxy(p))
+  }
   // Fallback for types without a dedicated class (e.g. xtcp). Matches the
   // pattern in ProxyDetail.vue so the type tag and meta render correctly.
   return json.proxies.map((p: any) => {
@@ -347,6 +352,7 @@ const allProxyTypes = [
   'stcp',
   'xtcp',
   'sudp',
+  'socks5_relay',
 ]
 
 const fetchData = async () => {

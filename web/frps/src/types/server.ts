@@ -19,4 +19,8 @@ export interface ServerInfo {
   curConns: number
   clientCounts: number
   proxyTypeCount: Record<string, number>
+
+  // SOCKS5 Relay
+  socks5ProxyPort: number
+  httpConnectProxyPort: number
 }
