@@ -102,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import ActionButton from '@shared/components/ActionButton.vue'
 import { getServerInfo } from '../api/server'
@@ -170,8 +170,20 @@ const fetchData = async () => {
   await Promise.all([fetchServerInfo(), fetchGroups(), fetchSessions()])
 }
 
+let refreshTimer: number | null = null
+
 onMounted(() => {
   fetchData()
+  refreshTimer = window.setInterval(() => {
+    fetchGroups()
+    fetchSessions()
+  }, 5000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer !== null) {
+    window.clearInterval(refreshTimer)
+  }
 })
 </script>
 
