@@ -87,3 +87,34 @@ func (r *Socks5RelayGroupRegistry) GetGroupMembers(group string) []string {
 	}
 	return result
 }
+
+type GroupDetail struct {
+	Name    string
+	Members []GroupMemberDetail
+}
+
+type GroupMemberDetail struct {
+	RunID     string
+	ProxyName string
+	Online    bool
+}
+
+func (r *Socks5RelayGroupRegistry) GetAllGroups(onlineFn func(runID string) bool) []GroupDetail {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]GroupDetail, 0, len(r.groups))
+	for groupName := range r.groups {
+		detail := GroupDetail{Name: groupName}
+		for runID := range r.groups[groupName] {
+			proxyName := r.proxyNames[groupRunID{group: groupName, runID: runID}]
+			detail.Members = append(detail.Members, GroupMemberDetail{
+				RunID:     runID,
+				ProxyName: proxyName,
+				Online:    onlineFn(runID),
+			})
+		}
+		result = append(result, detail)
+	}
+	return result
+}

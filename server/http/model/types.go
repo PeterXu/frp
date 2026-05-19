@@ -38,6 +38,9 @@ type ServerInfoResp struct {
 	CurConns        int64            `json:"curConns"`
 	ClientCounts    int64            `json:"clientCounts"`
 	ProxyTypeCounts map[string]int64 `json:"proxyTypeCount"`
+
+	Socks5ProxyPort      int `json:"socks5ProxyPort"`
+	HTTPConnectProxyPort int `json:"httpConnectProxyPort"`
 }
 
 type ClientInfoResp struct {
@@ -99,6 +102,22 @@ type XTCPOutConf struct {
 type Socks5RelayOutConf struct {
 	BaseOutConf
 	Group string `json:"group"`
+}
+
+type Socks5RelayGroupInfo struct {
+	Name    string                     `json:"name"`
+	Members []Socks5RelayGroupMember   `json:"members"`
+}
+
+type Socks5RelayGroupMember struct {
+	RunID     string `json:"runID"`
+	ProxyName string `json:"proxyName"`
+	Online    bool   `json:"online"`
+}
+
+type Socks5RelaySessionInfo struct {
+	Username string `json:"username"`
+	RunID    string `json:"runID"`
 }
 
 // Get proxy info.
