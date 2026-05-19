@@ -1,0 +1,328 @@
+# frpc Production Configuration Template
+# Copy to /opt/frp/config/machine-X/frpc.toml and customize
+
+# ============================================================================
+# Server Connection
+# ============================================================================
+
+# frps server address
+serverAddr = "127.0.0.1"
+
+# frps server port
+serverPort = 7000
+
+# ============================================================================
+# Authentication
+# ============================================================================
+
+[auth]
+# Authentication token (MUST match frps configuration)
+token = "CHANGE_ME_GENERATE_STRONG_TOKEN_HERE"
+
+# ============================================================================
+# Client Configuration
+# ============================================================================
+
+# Identity
+user = "machine-a"
+
+# If loginFailExit is true, frpc will exit after first login failure
+# If false, frpc will keep retrying to connect (recommended for production)
+loginFailExit = false
+
+# ============================================================================
+# Logging
+# ============================================================================
+
+[log]
+# Log output location: console, file
+to = "/var/log/frp/frpc.log"
+
+# Log level: trace, debug, info, warn, error
+level = "info"
+
+# Maximum days to keep log files
+maxDays = 7
+
+# Disable log timestamps when using systemd journal
+disablePrintColor = false
+
+# ============================================================================
+# Transport Configuration
+# ============================================================================
+
+[transport]
+# Transport protocol: tcp, kcp, quic, websocket, wss
+protocol = "tcp"
+
+# Enable DNS resolution for server address
+# dnsServer = "8.8.8.8"
+
+# TCP multiplexing (recommended, reduces connection overhead)
+[transport.tcpMux]
+tcpMux = true
+# TCP mux keepalive interval in seconds
+tcpMuxKeepaliveInterval = 60
+
+# Heartbeat configuration
+[transport.heartbeat]
+# Heartbeat interval in seconds (default: 30)
+interval = 30
+
+# Heartbeat timeout in seconds (default: 90)
+timeout = 90
+
+# Dial server timeout in seconds
+dialServerTimeout = 10
+
+# Dial server keepalive in seconds
+dialServerKeepAlive = 60
+
+# ============================================================================
+# TLS Configuration (Recommended for Production)
+# ============================================================================
+
+# [transport.tls]
+# Enable TLS
+# enable = true
+
+# TLS cert file (for mutual TLS)
+# certFile = "/etc/frp/tls/client.crt"
+
+# TLS key file
+# keyFile = "/etc/frp/tls/client.key"
+
+# Trusted CA cert file
+# trustedCaFile = "/etc/frp/tls/ca.crt"
+
+# Server name for TLS verification
+# serverName = "frps.example.com"
+
+# Disable custom TLS first byte
+# disableCustomTLSFirstByte = false
+
+# ============================================================================
+# Proxy Configuration Examples
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# TCP Proxy (Single Service)
+# ----------------------------------------------------------------------------
+
+[[proxies]]
+name = "ssh"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+remotePort = 6000
+
+# ----------------------------------------------------------------------------
+# HTTP Proxy with Custom Domain
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "web-service"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# customDomains = ["app.example.com"]
+#
+# # Optional: HTTP authentication
+# httpUser = "user"
+# httpPwd = "password"
+#
+# # Optional: Host header rewrite
+# hostHeaderRewrite = "backend.local"
+#
+# # Optional: Set headers
+# [proxies.headers]
+# X-From-Where = "frp"
+
+# ----------------------------------------------------------------------------
+# HTTPS Proxy
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "web-secure"
+# type = "https"
+# localIP = "127.0.0.1"
+# localPort = 8443
+# customDomains = ["secure.example.com"]
+
+# ----------------------------------------------------------------------------
+# Load Balancing Group (Multiple Backends)
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "app-backend-1"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# customDomains = ["app.example.com"]
+# loadBalancer.group = "app"
+# loadBalancer.groupKey = "app-group-secret-key"
+#
+# # Health check (recommended for load balancing)
+# [proxies.healthCheck]
+# type = "http"
+# path = "/health"
+# timeoutSeconds = 3
+# maxFailed = 3
+# intervalSeconds = 10
+
+# [[proxies]]
+# name = "app-backend-2"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 8081
+# customDomains = ["app.example.com"]
+# loadBalancer.group = "app"
+# loadBalancer.groupKey = "app-group-secret-key"
+#
+# [proxies.healthCheck]
+# type = "http"
+# path = "/health"
+# timeoutSeconds = 3
+# maxFailed = 3
+# intervalSeconds = 10
+
+# [[proxies]]
+# name = "app-backend-3"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 8082
+# customDomains = ["app.example.com"]
+# loadBalancer.group = "app"
+# loadBalancer.groupKey = "app-group-secret-key"
+#
+# [proxies.healthCheck]
+# type = "http"
+# path = "/health"
+# timeoutSeconds = 3
+# maxFailed = 3
+# intervalSeconds = 10
+
+# ----------------------------------------------------------------------------
+# Secure TCP Proxy (STCP)
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "secret-ssh"
+# type = "stcp"
+# secretKey = "ssh-secret-key"
+# localIP = "127.0.0.1"
+# localPort = 22
+#
+# # Only allow specified users
+# allowUsers = ["user1", "user2"]
+
+# ----------------------------------------------------------------------------
+# UDP Proxy
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "dns"
+# type = "udp"
+# localIP = "127.0.0.1"
+# localPort = 53
+# remotePort = 6053
+
+# ----------------------------------------------------------------------------
+# TCP Multiplexing
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "tcpmux-http"
+# type = "tcpmux"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# customDomains = ["tcpmux.example.com"]
+# multiplexer = "httpconnect"
+
+# ----------------------------------------------------------------------------
+# Bandwidth Limit
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "limited-service"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# remotePort = 7000
+# bandwidthLimit = "1MB"
+# bandwidthLimitMode = "server"
+
+# ----------------------------------------------------------------------------
+# Encryption and Compression
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "secure-service"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# remotePort = 7000
+# useEncryption = true
+# useCompression = true
+
+# ============================================================================
+# Visitor Configuration (For STCP/SUDP/XTCP)
+# ============================================================================
+
+# [[visitors]]
+# name = "secret-ssh-visitor"
+# type = "stcp"
+# serverName = "secret-ssh"
+# secretKey = "ssh-secret-key"
+# bindPort = 6001
+
+# ============================================================================
+# Advanced Configuration (Uncomment as needed)
+# ============================================================================
+
+# Admin UI for frpc
+# [webServer]
+# addr = "127.0.0.1"
+# port = 7400
+# user = "admin"
+# password = "admin"
+
+# Enable client metrics
+# enablePrometheus = true
+
+# Metadatas (sent to server plugins)
+# [metadatas]
+# meta1 = "value1"
+# meta2 = "value2"
+
+# ============================================================================
+# Notes
+# ============================================================================
+
+# 1. After modifying this file, reload the service:
+#    sudo systemctl reload frpc@machine-name
+#
+# 2. Proxy names must be unique within each frpc instance
+#
+# 3. For load balancing:
+#    - All proxies in group must have same type
+#    - TCP: same remotePort
+#    - HTTP/HTTPS: same customDomains
+#    - Must have same groupKey
+#
+# 4. Health check types:
+#    - tcp: Port connection check
+#    - http: HTTP 2xx response check
+#
+# 5. Security best practices:
+#    - Use TLS for production
+#    - Rotate secret keys regularly
+#    - Limit allowUsers for STCP
+#    - Monitor logs for suspicious activity
+#    - Use strong passwords for HTTP auth
+#
+# 6. Monitoring:
+#    - Enable Prometheus metrics
+#    - Set up log aggregation
+#    - Monitor health check failures
+#    - Alert on connection issues
