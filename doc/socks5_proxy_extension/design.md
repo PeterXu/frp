@@ -851,6 +851,253 @@ transport.proxyURL = "socks5://user:passwd@accelerate-proxy:1080"
 
 ---
 
+## Module 7: Dashboard & Monitoring
+
+> **Overview**: Real-time connection tracking and monitoring through the web dashboard.
+
+### Architecture
+
+```
++--------------------------------------------------------------+
+|                        frps Dashboard                         |
+|                                                               |
+|  +-------------------------------------------------------+   |
+|  |              RelayConnTracker                          |   |
+|  |                                                       |   |
+|  |  Responsibility: track active & closed connections    |   |
+|  |                                                       |   |
+|  |  Data:                                                |   |
+|  |    - connections: map[id] -> RelayConnInfo            |   |
+|  |    - closedConnections: map[id] -> RelayConnInfo      |   |
+|  |    - retentionDuration: time.Duration                 |   |
+|  |    - subscribers: map[chan] -> struct{}               |   |
+|  |                                                       |   |
+|  |  Operations:                                          |   |
+|  |    - Track(info) -> id                               |   |
+|  |    - UpdateBytes(id, bytesIn, bytesOut)              |   |
+|  |    - Remove(id) -> moves to closedConnections        |   |
+|  |    - GetAll() -> []RelayConnInfo                      |   |
+|  |    - GetAllIncludingClosed() -> []RelayConnInfo       |   |
+|  |    - Subscribe(ctx) -> <-chan RelayConnEvent          |   |
+|  |                                                       |   |
+|  |  Cleanup:                                             |   |
+|  |    - Periodic cleanup every minute                    |   |
+|  |    - Remove closed connections > retentionDuration    |   |
+|  |    - Early cleanup if >10,000 entries (memory limit)  |   |
+|  |                                                       |   |
+|  +-------------------------------------------------------+   |
+|                             |                                 |
+|                             v                                 |
+|  +-------------------------------------------------------+   |
+|  |              API Endpoints                            |   |
+|  |                                                       |   |
+|  |  GET  /api/socks5relay/connections                   |   |
+|  |  GET  /api/socks5relay/stats                         |   |
+|  |  GET  /api/socks5relay/retention                     |   |
+|  |  PUT  /api/socks5relay/retention                     |   |
+|  |  GET  /api/socks5relay/events (SSE)                  |   |
+|  |                                                       |   |
+|  +-------------------------------------------------------+   |
+|                             |                                 |
+|                             v                                 |
+|  +-------------------------------------------------------+   |
+|  |              Dashboard UI                             |   |
+|  |                                                       |   |
+|  |  Connections View:                                    |   |
+|  |    - Active connections table                         |   |
+|  |    - Recent connections table (closed)                 |   |
+|  |    - Stats cards (active count, traffic)              |   |
+|  |    - Retention adjustment dialog                       |   |
+|  |    - SSE real-time updates                            |   |
+|  |                                                       |   |
+|  +-------------------------------------------------------+   |
+|                                                               |
++--------------------------------------------------------------+
+```
+
+### Data Structures
+
+**RelayConnInfo** (server/socks5proxy/relay_conn_tracker.go):
+```go
+type RelayConnInfo struct {
+    ID        string      // Unique connection ID
+    SourceIP  string      // Client IP:port
+    Protocol  string      // "socks5" or "http_connect"
+    Group     string      // Username (= group name)
+    DstAddr   string      // Target address (IPv4, IPv6, or domain)
+    DstPort   uint16      // Target port
+    ProxyName string      // frpc proxy name
+    RunID     string      // frpc instance ID
+    StartTime time.Time   // Connection start time
+    EndTime   *time.Time  // nil if active, set if closed
+    BytesIn   int64       // Bytes from client
+    BytesOut  int64       // Bytes to client
+    IsActive  bool        // true for active, false for closed
+}
+```
+
+**RelayConnEvent** (SSE events):
+```go
+type RelayConnEvent struct {
+    Type string        `json:"type"` // "created", "updated", "deleted"
+    Conn RelayConnInfo `json:"conn"`
+}
+```
+
+### API Endpoints
+
+| Endpoint | Method | Response | Description |
+|----------|--------|----------|-------------|
+| `/api/socks5relay/connections` | GET | `[]RelayConnectionInfo` | Get all connections (active + closed) |
+| `/api/socks5relay/stats` | GET | `RelayConnectionStats` | Get aggregated stats |
+| `/api/socks5relay/retention` | GET | `{retentionSeconds: int}` | Get current retention setting |
+| `/api/socks5relay/retention` | PUT | `{retentionSeconds: int}` | Set retention (0-3600 seconds) |
+| `/api/socks5relay/events` | GET | SSE stream | Real-time connection events |
+
+### Dashboard Features
+
+**Connections View** (`/connections`):
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Connections                                                 │
+│  Active and recent SOCKS5/HTTP CONNECT relay connections    │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Active: 12   │  │ Recent: 45   │  │ Traffic:     │      │
+│  │              │  │ (10min)      │  │ ↓1.2MB ↑800KB│      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                                                              │
+│  [Active Connections] [Recent Connections]                  │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ Source │ Protocol │ Group │ Dest │ Proxy │ Duration │   │ │
+│  │────────│──────────│───────│──────│───────│──────────│───│ │
+│  │ ...    │ ...      │ ...   │ ...  │ ...   │ ...      │   │ │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Features**:
+- **Active Connections Tab**: Shows currently connected clients
+- **Recent Connections Tab**: Shows closed connections within retention period
+- **Auto-refresh**: Updates every 30 seconds via polling + SSE events
+- **Retention Adjustment**: Click "Recent" card to adjust retention time
+- **IPv6 Support**: Properly formats IPv6 addresses as `[addr]:port`
+- **Domain vs IP**: Shows what the client sent (domain if using `--socks5-hostname`, IP otherwise)
+
+### Retention Settings
+
+**Behavior**:
+- Default: 10 minutes (600 seconds)
+- Range: 0 (disabled) to 3600 (1 hour)
+- Runtime-only: Resets to 10min on frps restart
+- Validation: Server-side, rejects invalid values
+
+**Presets in UI**:
+- Disabled (0s) - No closed connections stored
+- 1 minute (60s)
+- 5 minutes (300s)
+- 10 minutes (600s) - Default
+- 15 minutes (900s)
+- 30 minutes (1800s)
+- 1 hour (3600s)
+
+### Destination Display
+
+**What gets displayed** depends on what the SOCKS5 client sends:
+
+| Client Mode | Address Type | Example Display |
+|-------------|--------------|-----------------|
+| `curl -x` | IPv4/IPv6 address | `93.184.216.34:80` or `[2606:2800:220:1:248:1893:25c8:1946]:80` |
+| `curl --socks5-hostname` | Domain name | `example.com:80` |
+
+**SOCKS5 Protocol Support**:
+- Type 0x01: IPv4 address → Shows IP
+- Type 0x03: Domain name → Shows domain
+- Type 0x04: IPv6 address → Shows IP
+
+**Note**: Most clients default to local DNS resolution. To see domain names in the dashboard, clients must use the SOCKS5 domain name feature (type 0x03).
+
+### Connection Lifecycle
+
+```
+Client connects → Track() → conn added to connections map
+                                        |
+                                        v
+                            SSE "created" event broadcast
+                                        |
+                                        v
+                    UpdateBytes() called periodically (via StatsConn)
+                                        |
+                                        v
+Client disconnect → Remove() → moved to closedConnections map
+                                        |
+                                        v
+                            SSE "deleted" event broadcast
+                                        |
+                                        v
+                    Cleanup after retentionDuration expires
+```
+
+### Memory Management
+
+**Cleanup Strategy**:
+1. **Periodic cleanup**: Runs every minute via `cleanupLoop()`
+2. **Retention-based**: Removes connections older than `retentionDuration`
+3. **Size-based**: Early cleanup if >10,000 closed connections (prevents memory pressure)
+4. **Disabled mode**: If retention = 0, clears all closed connections immediately
+
+**Thread Safety**:
+- `sync.RWMutex` protects `connections` and `closedConnections` maps
+- Separate `subMu` protects `subscribers` map
+- Broadcast happens outside lock to prevent blocking
+
+### Configuration
+
+**ServerConfig extension** (pkg/config/v1/server.go):
+```go
+// ConnRetentionDuration specifies how long to keep closed connections
+// in memory for dashboard display. Default is 10 minutes.
+// Set to 0 to disable keeping closed connections.
+ConnRetentionDuration int64 `json:"connRetentionDuration,omitempty"`
+```
+
+**Example frps.toml**:
+```toml
+[webServer]
+addr = "127.0.0.1"
+port = 7500
+user = "admin"
+password = "admin"
+assetsDir = "./web/frps/dist"
+
+# Connection retention (optional, defaults to 10min)
+# connRetentionDuration = 600  # seconds, 0 = disabled
+```
+
+### Key Decisions
+
+| Decision | Reason |
+|----------|--------|
+| In-memory storage only | Simplified design, no persistence needed for transient data |
+| SSE for real-time updates | Efficient push-based updates vs polling |
+| Retention runtime-only | Avoids config file complexity, restart resets to default |
+| Separate active/closed tabs | Clear UX distinction between current and historical data |
+| IPv6 bracket notation | Standard URL format for IPv6 addresses with ports |
+| Show what client sent | Client controls DNS resolution (local vs proxy) |
+
+### File Locations
+
+```
+server/socks5proxy/relay_conn_tracker.go  - Connection tracker implementation
+server/api_router.go                       - API endpoints
+server/service.go                          - Tracker creation & lifecycle
+web/frps/src/views/Connections.vue        - Dashboard UI
+web/frps/src/api/socks5relay.ts           - Frontend API functions
+web/frps/src/types/socks5relay.ts         - TypeScript types
+```
+
+---
+
 ## Security Considerations
 
 ### SSRF Protection
@@ -982,6 +1229,9 @@ Module dependency (implementation order):
   Module 1 + Module 2 + Module 3 ---------> complete functionality
 
   Module 6 (upstream proxy) -> **already exists in FRP, no implementation needed**
+
+  Module 7 (dashboard) --------> optional monitoring layer
+                              depends on Module 1 (for tracking integration)
 ```
 
 ---
@@ -1091,7 +1341,12 @@ Recommended order:
    - Register both server and client proxy factories
    - OutboundDialer
 6. ~~Module 6: frpc Upstream Proxy~~ (**already exists in FRP, no implementation needed**)
-7. Tests
+7. Module 7: Dashboard & Monitoring (optional)
+   - RelayConnTracker implementation
+   - API endpoints for connections/stats/retention
+   - Dashboard UI (Connections view)
+   - SSE events for real-time updates
+8. Tests
 
 ---
 

@@ -17,8 +17,11 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -56,6 +59,8 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	subRouter.HandleFunc("/api/socks5relay/connections", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayConnections)).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/stats", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayStats)).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/events", svr.apiSocks5RelayEvents).Methods("GET")
+	subRouter.HandleFunc("/api/socks5relay/retention", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayRetention)).Methods("GET")
+	subRouter.HandleFunc("/api/socks5relay/retention", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelaySetRetention)).Methods("PUT")
 
 	// view
 	subRouter.Handle("/favicon.ico", http.FileServer(helper.AssetsFS)).Methods("GET")
@@ -147,6 +152,31 @@ func (svr *Service) apiSocks5RelayStats(ctx *httppkg.Context) (any, error) {
 		stats.TotalBytesOut += c.BytesOut
 	}
 	return stats, nil
+}
+
+func (svr *Service) apiSocks5RelayRetention(ctx *httppkg.Context) (any, error) {
+	duration := svr.connTracker.GetRetentionDuration()
+	return map[string]int64{"retentionSeconds": int64(duration.Seconds())}, nil
+}
+
+func (svr *Service) apiSocks5RelaySetRetention(ctx *httppkg.Context) (any, error) {
+	var req struct {
+		RetentionSeconds int64 `json:"retentionSeconds"`
+	}
+	if err := json.NewDecoder(ctx.Req.Body).Decode(&req); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("request body is required")
+		}
+		return nil, err
+	}
+
+	// Validate range: 0 (disabled) to 1 hour
+	if req.RetentionSeconds < 0 || req.RetentionSeconds > 3600 {
+		return nil, fmt.Errorf("retentionSeconds must be between 0 and 3600")
+	}
+
+	svr.connTracker.SetRetentionDuration(time.Duration(req.RetentionSeconds) * time.Second)
+	return map[string]int64{"retentionSeconds": req.RetentionSeconds}, nil
 }
 
 // apiSocks5RelayEvents is a Server-Sent Events endpoint that streams connection events.
