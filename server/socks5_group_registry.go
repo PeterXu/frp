@@ -89,14 +89,14 @@ func (r *Socks5RelayGroupRegistry) GetGroupMembers(group string) []string {
 }
 
 type GroupDetail struct {
-	Name    string
-	Members []GroupMemberDetail
+	Name    string              `json:"name"`
+	Members []GroupMemberDetail `json:"members"`
 }
 
 type GroupMemberDetail struct {
-	RunID     string
-	ProxyName string
-	Online    bool
+	RunID     string `json:"runID"`
+	ProxyName string `json:"proxyName"`
+	Online    bool   `json:"online"`
 }
 
 func (r *Socks5RelayGroupRegistry) GetAllGroups(onlineFn func(runID string) bool) []GroupDetail {
