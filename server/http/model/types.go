@@ -120,6 +120,26 @@ type Socks5RelaySessionInfo struct {
 	RunID    string `json:"runID"`
 }
 
+type RelayConnectionInfo struct {
+	ID        string `json:"id"`
+	SourceIP  string `json:"sourceIP"`
+	Protocol  string `json:"protocol"`
+	Group     string `json:"group"`
+	DstAddr   string `json:"dstAddr"`
+	DstPort   int    `json:"dstPort"`
+	ProxyName string `json:"proxyName"`
+	RunID     string `json:"runID"`
+	StartTime int64  `json:"startTime"`
+	BytesIn   int64  `json:"bytesIn"`
+	BytesOut  int64  `json:"bytesOut"`
+}
+
+type RelayConnectionStats struct {
+	TotalConnections int   `json:"totalConnections"`
+	TotalBytesIn     int64 `json:"totalBytesIn"`
+	TotalBytesOut    int64 `json:"totalBytesOut"`
+}
+
 // Get proxy info.
 type ProxyStatsInfo struct {
 	Name            string `json:"name"`
