@@ -10,10 +10,12 @@ package socks5proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -123,8 +125,22 @@ func (h *HTTPConnectHandler) handleConn(ctx context.Context, conn net.Conn) {
 	}
 	resp.Write(conn)
 
+	// Drain any bytes the client pipelined past the CONNECT request header.
+	var clientConn io.ReadWriteCloser = conn
+	if n := reader.Buffered(); n > 0 {
+		peeked, err := reader.Peek(n)
+		if err != nil {
+			xl.Warnf("peek buffered data error: %v", err)
+			return
+		}
+		clientConn = &bufferedConn{
+			Reader: io.MultiReader(bytes.NewReader(peeked), conn),
+			Conn:   conn,
+		}
+	}
+
 	// Bridge traffic
-	_, _, _ = libio.Join(conn, workConn)
+	_, _, _ = libio.Join(clientConn, workConn)
 }
 
 func (h *HTTPConnectHandler) extractUsername(req *http.Request) (string, error) {
@@ -180,3 +196,13 @@ func (w *respWriter) WriteHeader(code int) {
 	statusText := http.StatusText(code)
 	fmt.Fprintf(w.conn, "HTTP/1.1 %d %s\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n", code, statusText)
 }
+
+// bufferedConn wraps a net.Conn but replaces its Read with a custom io.Reader
+// (typically an io.MultiReader of peeked bufio bytes + the original conn).
+type bufferedConn struct {
+	io.Reader
+	net.Conn
+}
+
+func (b *bufferedConn) Read(p []byte) (int, error)  { return b.Reader.Read(p) }
+func (b *bufferedConn) Close() error                 { return b.Conn.Close() }
