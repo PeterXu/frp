@@ -113,6 +113,7 @@ import {
   TCPMuxProxy,
   STCPProxy,
   SUDPProxy,
+  Socks5RelayProxy,
 } from '../utils/proxy'
 import ProxyCard from '../components/ProxyCard.vue'
 import PopoverMenu from '@shared/components/PopoverMenu.vue'
@@ -136,6 +137,7 @@ const proxyTypes = [
   { label: 'TCPMUX', value: 'tcpmux' },
   { label: 'STCP', value: 'stcp' },
   { label: 'SUDP', value: 'sudp' },
+  { label: 'SOCKS5 RELAY', value: 'socks5_relay' },
 ]
 
 const activeType = ref((route.params.type as string) || 'tcp')
@@ -288,6 +290,8 @@ const fetchData = async () => {
       proxies.value = json.proxies.map((p: any) => new STCPProxy(p))
     } else if (type === 'sudp') {
       proxies.value = json.proxies.map((p: any) => new SUDPProxy(p))
+    } else if (type === 'socks5_relay') {
+      proxies.value = json.proxies.map((p: any) => new Socks5RelayProxy(p))
     }
   } catch (error: any) {
     ElMessage({
