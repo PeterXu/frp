@@ -1,0 +1,177 @@
+# frps Production Configuration Template
+# Copy to /opt/frp/config/machine-X/frps.toml and customize
+
+# ============================================================================
+# Basic Configuration
+# ============================================================================
+
+# The address that the server binds to (default: 0.0.0.0)
+bindAddr = "0.0.0.0"
+
+# The port that the server listens on (default: 7000)
+bindPort = 7000
+
+# ============================================================================
+# Authentication
+# ============================================================================
+
+[auth]
+# Authentication token for frpc connections
+# GENERATE STRONG TOKEN: openssl rand -hex 32
+token = "CHANGE_ME_GENERATE_STRONG_TOKEN_HERE"
+
+# ============================================================================
+# Dashboard
+# ============================================================================
+
+[webServer]
+# Dashboard address (default: 0.0.0.0)
+# For production, consider binding to internal IP only
+addr = "127.0.0.1"
+
+# Dashboard port (default: 7500)
+port = 7500
+
+# Dashboard username
+user = "admin"
+
+# Dashboard password
+# GENERATE STRONG PASSWORD: openssl rand -base64 16
+password = "CHANGE_ME_STRONG_PASSWORD_HERE"
+
+# ============================================================================
+# Logging
+# ============================================================================
+
+[log]
+# Log output location: console, file
+to = "/var/log/frp/frps.log"
+
+# Log level: trace, debug, info, warn, error
+level = "info"
+
+# Maximum days to keep log files
+maxDays = 7
+
+# Disable log timestamps when using systemd journal
+disablePrintColor = false
+
+# ============================================================================
+# Transport
+# ============================================================================
+
+[transport]
+# TCP_mux configuration
+[transport.tcpMux]
+# Enable TCP multiplexing (default: true)
+tcpMux = true
+
+# Heartbeat configuration
+[transport.heartbeat]
+# Heartbeat timeout in seconds (default: 90)
+# If no heartbeat received within this time, connection is closed
+timeout = 90
+
+# ============================================================================
+# Features
+# ============================================================================
+
+# Enable Prometheus metrics endpoint
+enablePrometheus = true
+
+# ============================================================================
+# Advanced Configuration (Uncomment as needed)
+# ============================================================================
+
+# QUIC protocol support
+# [[quicBindPort]]
+# port = 7001
+
+# KCP protocol support
+# kcpBindPort = 7000
+
+# Virtual host HTTP port
+# vhostHTTPPort = 80
+
+# Virtual host HTTPS port
+# vhostHTTPSPort = 443
+
+# TCPMux HTTP CONNECT port
+# tcpmuxHTTPConnectPort = 0
+
+# ============================================================================
+# TLS Configuration (Recommended for Production)
+# ============================================================================
+
+# [transport.tls]
+# Enable TLS for frps
+# enable = true
+
+# TLS cert file
+# certFile = "/etc/frp/tls/server.crt"
+
+# TLS key file
+# keyFile = "/etc/frp/tls/server.key"
+
+# Trusted CA cert file for client certificates
+# trustedCaFile = "/etc/frp/tls/ca.crt"
+
+# Server name for TLS verification
+# serverName = "frps.example.com"
+
+# ============================================================================
+# SOCKS5/HTTP CONNECT Proxy (If enabled in your build)
+# ============================================================================
+
+# socks5ProxyPort = 0
+# socks5ProxyAuthPassword = ""
+
+# httpConnectProxyPort = 0
+# httpConnectProxyAuthPassword = ""
+
+# ============================================================================
+# Security Settings
+# ============================================================================
+
+# Max ports per client (0 = unlimited)
+# maxPortsPerClient = 0
+
+# User connection timeout in seconds (default: 10)
+# userConnTimeout = 10
+
+# Send detailed errors to client (not recommended for production)
+# detailedErrorsToClient = false
+
+# ============================================================================
+# Subdomain Configuration
+# ============================================================================
+
+# subDomainHost = "example.com"
+
+# ============================================================================
+# Custom 404 Page
+# ============================================================================
+
+# custom404Page = "/path/to/404.html"
+
+# ============================================================================
+# Notes
+# ============================================================================
+
+# 1. After modifying this file, reload the service:
+#    sudo systemctl reload frps@machine-name
+#
+# 2. Generate secure tokens/passwords:
+#    Token:  openssl rand -hex 32
+#    Pass:   openssl rand -base64 16
+#
+# 3. For TLS certificates, consider using Let's Encrypt or company CA
+#
+# 4. Monitor logs for security events:
+#    sudo journalctl -u frps@machine-name -f
+#
+# 5. Regular security maintenance:
+#    - Rotate tokens monthly
+#    - Update frps regularly
+#    - Review access logs
+#    - Audit configuration changes
