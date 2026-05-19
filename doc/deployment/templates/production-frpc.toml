@@ -1,9 +1,13 @@
 # frpc Production Configuration Template
 # Copy to /opt/frp/config/machine-X/frpc.toml and customize
+#
+# Field order follows conf/frpc_full_example.toml
 
-# ============================================================================
-# Server Connection
-# ============================================================================
+# Optional unique identifier for this frpc instance.
+# clientID = "your_client_id"
+
+# your proxy name will be changed to {user}.{proxy}
+user = "machine-a"
 
 # frps server address
 serverAddr = "127.0.0.1"
@@ -11,93 +15,135 @@ serverAddr = "127.0.0.1"
 # frps server port
 serverPort = 7000
 
-# ============================================================================
-# Authentication
-# ============================================================================
+# STUN server to help penetrate NAT hole.
+# natHoleStunServer = "stun.easyvoip.com:3478"
 
-[auth]
-# Authentication token (MUST match frps configuration)
-token = "CHANGE_ME_GENERATE_STRONG_TOKEN_HERE"
-
-# ============================================================================
-# Client Configuration
-# ============================================================================
-
-# Identity
-user = "machine-a"
-
-# If loginFailExit is true, frpc will exit after first login failure
-# If false, frpc will keep retrying to connect (recommended for production)
+# Decide if exit program when first login failed, otherwise continuous relogin to frps
+# default is true
 loginFailExit = false
 
-# ============================================================================
-# Logging
-# ============================================================================
+# console or real logFile path like ./frpc.log
+log.to = "/var/log/frp/frpc.log"
+# trace, debug, info, warn, error
+log.level = "info"
+log.maxDays = 3
+# disable log colors when log.to is console, default is false
+log.disablePrintColor = false
 
-[log]
-# Log output location: console, file
-to = "/var/log/frp/frpc.log"
+# auth.method specifies what authentication method to use.
+# By default, this value is "token".
+# auth.method = "token"
 
-# Log level: trace, debug, info, warn, error
-level = "info"
+# auth.additionalScopes specifies additional scopes to include authentication information.
+# Optional values are HeartBeats, NewWorkConns.
+# auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
 
-# Maximum days to keep log files
-maxDays = 7
+# GENERATE STRONG TOKEN: openssl rand -hex 32 (MUST match frps configuration)
+auth.token = "CHANGE_ME_GENERATE_STRONG_TOKEN_HERE"
 
-# Disable log timestamps when using systemd journal
-disablePrintColor = false
+# alternatively, you can use tokenSource to load the token from a file
+# this is mutually exclusive with auth.token
+# auth.tokenSource.type = "file"
+# auth.tokenSource.file.path = "/etc/frp/token"
 
-# ============================================================================
-# Transport Configuration
-# ============================================================================
+# OIDC settings (only used if auth.method = "oidc")
+# auth.oidc.clientID = ""
+# auth.oidc.clientSecret = ""
+# auth.oidc.audience = ""
+# auth.oidc.scope = ""
+# auth.oidc.tokenEndpointURL = ""
+# auth.oidc.additionalEndpointParams.audience = "https://dev.auth.com/api/v2/"
+# auth.oidc.additionalEndpointParams.var1 = "foobar"
+# auth.oidc.trustedCaFile = "/path/to/ca.crt"
+# auth.oidc.insecureSkipVerify = false
+# auth.oidc.proxyURL = "http://proxy.example.com:8080"
 
-[transport]
-# Transport protocol: tcp, kcp, quic, websocket, wss
-protocol = "tcp"
+# Admin UI for frpc (optional)
+# webServer.addr = "127.0.0.1"
+# webServer.port = 7400
+# webServer.user = "admin"
+# webServer.password = "admin"
+# webServer.assetsDir = "./static"
 
-# Enable DNS resolution for server address
+# The maximum amount of time a dial to server will wait for a connect to complete. Default value is 10 seconds.
+# transport.dialServerTimeout = 10
+
+# dialServerKeepalive specifies the interval between keep-alive probes for an active network connection.
+# If negative, keep-alive probes are disabled.
+# transport.dialServerKeepalive = 7200
+
+# connections will be established in advance, default value is zero
+# transport.poolCount = 5
+
+# If tcp stream multiplexing is used, default is true, it must be same with frps
+# transport.tcpMux = true
+
+# Specify keep alive interval for tcp mux.
+# only valid if tcpMux is enabled.
+# transport.tcpMuxKeepaliveInterval = 30
+
+# Communication protocol used to connect to server
+# supports tcp, kcp, quic, websocket and wss now, default is tcp
+transport.protocol = "tcp"
+
+# FRP wire protocol used inside the selected transport.
+# supports v1 and v2, default is v1.
+# transport.wireProtocol = "v1"
+
+# set client binding ip when connect server, default is empty.
+# only when protocol = tcp or websocket, the value will be used.
+# transport.connectServerLocalIP = "0.0.0.0"
+
+# if you want to connect frps by http proxy or socks5 proxy or ntlm proxy, you can set proxyURL here
+# it only works when protocol is tcp
+# transport.proxyURL = "http://user:passwd@192.168.1.128:8080"
+# transport.proxyURL = "socks5://user:passwd@192.168.1.128:1080"
+# transport.proxyURL = "ntlm://user:passwd@192.168.1.128:2080"
+
+# QUIC protocol options
+# transport.quic.keepalivePeriod = 10
+# transport.quic.maxIdleTimeout = 30
+# transport.quic.maxIncomingStreams = 100000
+
+# If tls.enable is true, frpc will connect frps by tls.
+# Since v0.50.0, the default value has been changed to true, and tls is enabled by default.
+# transport.tls.enable = true
+# transport.tls.certFile = "client.crt"
+# transport.tls.keyFile = "client.key"
+# transport.tls.trustedCaFile = "ca.crt"
+# transport.tls.serverName = "example.com"
+
+# If the disableCustomTLSFirstByte is set to false, frpc will establish a connection with frps
+# using the first custom byte when tls is enabled.
+# transport.tls.disableCustomTLSFirstByte = true
+
+# Heartbeat configure, it's not recommended to modify the default value.
+# The default value of heartbeatInterval is 10 and heartbeatTimeout is 90.
+# Set negative value to disable it.
+# transport.heartbeatInterval = 30
+# transport.heartbeatTimeout = 90
+
+# Specify a dns server, so frpc will use this instead of default one
 # dnsServer = "8.8.8.8"
 
-# TCP multiplexing (recommended, reduces connection overhead)
-tcpMux = true
+# Proxy names you want to start. Default is empty, means all proxies.
+# start = ["ssh", "dns"]
 
-# TCP mux keepalive interval in seconds
-tcpMuxKeepaliveInterval = 60
+# specify udp packet size, unit is byte. If not set, the default value is 1500.
+# udpPacketSize = 1500
 
-# Heartbeat interval in seconds (default: 30)
-heartbeatInterval = 30
+# Feature gates allows you to enable or disable experimental features
+# featureGates = { VirtualNet = true }
 
-# Heartbeat timeout in seconds (default: 90)
-heartbeatTimeout = 90
+# VirtualNet settings for experimental virtual network capabilities
+# virtualNet.address = "100.86.1.1/24"
 
-# Dial server timeout in seconds
-dialServerTimeout = 10
+# Additional metadatas for client.
+# metadatas.var1 = "abc"
+# metadatas.var2 = "123"
 
-# Dial server keepalive in seconds
-dialServerKeepalive = 60
-
-# ============================================================================
-# TLS Configuration (Recommended for Production)
-# ============================================================================
-
-# [transport.tls]
-# Enable TLS
-# enable = true
-
-# TLS cert file (for mutual TLS)
-# certFile = "/etc/frp/tls/client.crt"
-
-# TLS key file
-# keyFile = "/etc/frp/tls/client.key"
-
-# Trusted CA cert file
-# trustedCaFile = "/etc/frp/tls/ca.crt"
-
-# Server name for TLS verification
-# serverName = "frps.example.com"
-
-# Disable custom TLS first byte
-# disableCustomTLSFirstByte = false
+# Include other config files for proxies.
+# includes = ["./confd/*.ini"]
 
 # ============================================================================
 # Proxy Configuration Examples
@@ -108,10 +154,12 @@ dialServerKeepalive = 60
 # ----------------------------------------------------------------------------
 
 [[proxies]]
+# 'ssh' is the unique proxy name
 name = "ssh"
 type = "tcp"
 localIP = "127.0.0.1"
 localPort = 22
+# Remote port listen by frps
 remotePort = 6000
 
 # ----------------------------------------------------------------------------
@@ -127,14 +175,13 @@ remotePort = 6000
 #
 # # Optional: HTTP authentication
 # httpUser = "user"
-# httpPwd = "password"
+# httpPassword = "password"
 #
 # # Optional: Host header rewrite
 # hostHeaderRewrite = "backend.local"
 #
 # # Optional: Set headers
-# [proxies.headers]
-# X-From-Where = "frp"
+# requestHeaders.set.x-from-where = "frp"
 
 # ----------------------------------------------------------------------------
 # HTTPS Proxy
@@ -161,12 +208,11 @@ remotePort = 6000
 # loadBalancer.groupKey = "app-group-secret-key"
 #
 # # Health check (recommended for load balancing)
-# [proxies.healthCheck]
-# type = "http"
-# path = "/health"
-# timeoutSeconds = 3
-# maxFailed = 3
-# intervalSeconds = 10
+# healthCheck.type = "http"
+# healthCheck.path = "/health"
+# healthCheck.timeoutSeconds = 3
+# healthCheck.maxFailed = 3
+# healthCheck.intervalSeconds = 10
 
 # [[proxies]]
 # name = "app-backend-2"
@@ -177,28 +223,11 @@ remotePort = 6000
 # loadBalancer.group = "app"
 # loadBalancer.groupKey = "app-group-secret-key"
 #
-# [proxies.healthCheck]
-# type = "http"
-# path = "/health"
-# timeoutSeconds = 3
-# maxFailed = 3
-# intervalSeconds = 10
-
-# [[proxies]]
-# name = "app-backend-3"
-# type = "http"
-# localIP = "127.0.0.1"
-# localPort = 8082
-# customDomains = ["app.example.com"]
-# loadBalancer.group = "app"
-# loadBalancer.groupKey = "app-group-secret-key"
-#
-# [proxies.healthCheck]
-# type = "http"
-# path = "/health"
-# timeoutSeconds = 3
-# maxFailed = 3
-# intervalSeconds = 10
+# healthCheck.type = "http"
+# healthCheck.path = "/health"
+# healthCheck.timeoutSeconds = 3
+# healthCheck.maxFailed = 3
+# healthCheck.intervalSeconds = 10
 
 # ----------------------------------------------------------------------------
 # Secure TCP Proxy (STCP)
@@ -210,8 +239,6 @@ remotePort = 6000
 # secretKey = "ssh-secret-key"
 # localIP = "127.0.0.1"
 # localPort = 22
-#
-# # Only allow specified users
 # allowUsers = ["user1", "user2"]
 
 # ----------------------------------------------------------------------------
@@ -232,36 +259,10 @@ remotePort = 6000
 # [[proxies]]
 # name = "tcpmux-http"
 # type = "tcpmux"
+# multiplexer = "httpconnect"
 # localIP = "127.0.0.1"
 # localPort = 8080
 # customDomains = ["tcpmux.example.com"]
-# multiplexer = "httpconnect"
-
-# ----------------------------------------------------------------------------
-# Bandwidth Limit
-# ----------------------------------------------------------------------------
-
-# [[proxies]]
-# name = "limited-service"
-# type = "tcp"
-# localIP = "127.0.0.1"
-# localPort = 8080
-# remotePort = 7000
-# bandwidthLimit = "1MB"
-# bandwidthLimitMode = "server"
-
-# ----------------------------------------------------------------------------
-# Encryption and Compression
-# ----------------------------------------------------------------------------
-
-# [[proxies]]
-# name = "secure-service"
-# type = "tcp"
-# localIP = "127.0.0.1"
-# localPort = 8080
-# remotePort = 7000
-# useEncryption = true
-# useCompression = true
 
 # ----------------------------------------------------------------------------
 # SOCKS5 Relay Proxy
@@ -274,6 +275,32 @@ remotePort = 6000
 # # groupKey = "optional-group-secret"
 # # outboundProxy = "optional-outbound-proxy-name"
 
+# ----------------------------------------------------------------------------
+# Bandwidth Limit
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "limited-service"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# remotePort = 7000
+# transport.bandwidthLimit = "1MB"
+# transport.bandwidthLimitMode = "server"
+
+# ----------------------------------------------------------------------------
+# Encryption and Compression
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "secure-service"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# remotePort = 7000
+# transport.useEncryption = true
+# transport.useCompression = true
+
 # ============================================================================
 # Visitor Configuration (For STCP/SUDP/XTCP)
 # ============================================================================
@@ -284,54 +311,3 @@ remotePort = 6000
 # serverName = "secret-ssh"
 # secretKey = "ssh-secret-key"
 # bindPort = 6001
-
-# ============================================================================
-# Advanced Configuration (Uncomment as needed)
-# ============================================================================
-
-# Admin UI for frpc
-# [webServer]
-# addr = "127.0.0.1"
-# port = 7400
-# user = "admin"
-# password = "admin"
-
-# Enable client metrics
-# enablePrometheus = true
-
-# Metadatas (sent to server plugins)
-# [metadatas]
-# meta1 = "value1"
-# meta2 = "value2"
-
-# ============================================================================
-# Notes
-# ============================================================================
-
-# 1. After modifying this file, reload the service:
-#    sudo systemctl reload frpc@machine-name
-#
-# 2. Proxy names must be unique within each frpc instance
-#
-# 3. For load balancing:
-#    - All proxies in group must have same type
-#    - TCP: same remotePort
-#    - HTTP/HTTPS: same customDomains
-#    - Must have same groupKey
-#
-# 4. Health check types:
-#    - tcp: Port connection check
-#    - http: HTTP 2xx response check
-#
-# 5. Security best practices:
-#    - Use TLS for production
-#    - Rotate secret keys regularly
-#    - Limit allowUsers for STCP
-#    - Monitor logs for suspicious activity
-#    - Use strong passwords for HTTP auth
-#
-# 6. Monitoring:
-#    - Enable Prometheus metrics
-#    - Set up log aggregation
-#    - Monitor health check failures
-#    - Alert on connection issues
