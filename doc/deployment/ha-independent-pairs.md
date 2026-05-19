@@ -182,6 +182,18 @@ telnet machine-a-public-ip 6000
 # Should connect to either web1:8080 or web2:8081 (round-robin)
 ```
 
+### Test SOCKS5 Relay (if enabled)
+
+```bash
+# Use socks5h:// (remote DNS) — recommended
+curl -x socks5h://mygroup:mypassword@machine-a:10800 https://example.com
+# Dashboard shows: example.com:443
+
+# Avoid socks5:// (local DNS) — sends IP instead of domain
+# curl -x socks5://mygroup:mypassword@machine-a:10800 https://example.com
+# Dashboard shows: 93.184.216.34:443, HTTPS may fail with outbound proxy
+```
+
 ### Check Logs
 
 ```bash

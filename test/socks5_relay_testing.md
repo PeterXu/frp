@@ -2,6 +2,25 @@
 
 This guide covers testing the SOCKS5 relay proxy feature and the dashboard's real-time connection monitoring.
 
+## Important: Use Remote DNS Resolution
+
+Always use `socks5h://` (or `--socks5-hostname`) instead of `socks5://` for SOCKS5 proxy connections.
+
+**Why:** `socks5://` resolves DNS locally and sends IP addresses to the proxy. This causes:
+- HTTPS failures (SSL_ERROR_SYSCALL) — outbound proxy needs domain for CONNECT tunnel
+- Dashboard shows IP instead of domain name
+- Internal/private domains unreachable when local DNS can't resolve them
+
+`socks5h://` sends domain names through SOCKS5 (RFC 1928 ATYP 0x03), letting the proxy side handle DNS resolution.
+
+```bash
+# ✅ Correct — remote DNS, sends domain name
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 https://example.com
+
+# ❌ Avoid — local DNS, sends IP address
+curl -x socks5://testgroup:testpass@127.0.0.1:10800 https://example.com
+```
+
 ## Quick Start
 
 ### 1. Start Services
@@ -18,10 +37,10 @@ This guide covers testing the SOCKS5 relay proxy feature and the dashboard's rea
 
 ```bash
 # HTTP through SOCKS5
-curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 http://example.com
 
 # HTTPS through SOCKS5
-curl -x socks5://testgroup:testpass@127.0.0.1:10800 https://example.com
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 https://example.com
 ```
 
 ### 3. Test HTTP CONNECT Proxy
@@ -49,7 +68,7 @@ HTTP requests complete in ~100ms, which is too fast to see in the dashboard. Use
 
 ```bash
 # Using httpbin (2 second delay)
-curl -x socks5://testgroup:testpass@127.0.0.1:10800 \
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 \
   --max-time 5 \
   http://httpbin.org/delay/2
 ```
@@ -81,7 +100,7 @@ if __name__ == '__main__':
 python3 slow_server.py &
 
 # Test through proxy
-curl -x socks5://testgroup:testpass@127.0.0.1:10800 \
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 \
   --max-time 5 \
   http://127.0.0.1:8766/
 ```
@@ -97,7 +116,7 @@ timeout 10 curl -s -N \
   -H "Authorization: Basic YWRtaW46YWRtaW4=" &
 
 # Make test connection while listening
-curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 http://example.com
 ```
 
 Expected output:
@@ -200,7 +219,7 @@ curl -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
 ```bash
 # Multiple concurrent connections
 for i in {1..10}; do
-  curl -x socks5://testgroup:testpass@127.0.0.1:10800 \
+  curl -x socks5h://testgroup:testpass@127.0.0.1:10800 \
     http://example.com &
 done
 
@@ -224,7 +243,7 @@ curl -X PUT http://127.0.0.1:17500/api/socks5relay/retention \
   -d '{"retentionSeconds": 60}'
 
 # Make a connection (completes quickly)
-curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 http://example.com
 
 # Check connections - should show in "Recent" tab
 curl http://127.0.0.1:17500/api/socks5relay/connections \
@@ -240,7 +259,7 @@ Test runtime retention changes:
 ```bash
 # Make some connections
 for i in {1..3}; do
-  curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com &
+  curl -x socks5h://testgroup:testpass@127.0.0.1:10800 http://example.com &
 done
 wait
 
@@ -261,13 +280,32 @@ curl http://127.0.0.1:17500/api/socks5relay/connections \
   -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq '. | length'
 ```
 
+### Domain vs IP Display
+
+Test difference between local DNS resolution and remote DNS resolution:
+
+```bash
+# Mode 1: Remote DNS (recommended) — sends domain name through SOCKS5
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 https://example.com
+# Dashboard shows: example.com:443
+
+# Mode 2: Local DNS (not recommended) — resolves locally, sends IP
+curl -x socks5://testgroup:testpass@127.0.0.1:10800 https://example.com
+# Dashboard shows: 93.184.216.34:443
+# HTTPS may fail if frpc uses outbound proxy (SSL_ERROR_SYSCALL)
+
+# Verify
+curl http://127.0.0.1:17500/api/socks5relay/connections \
+  -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq '.[-1].dstAddr'
+```
+
 ### IPv6 Address Formatting
 
 Test IPv6 addresses are properly formatted:
 
 ```bash
 # Use IPv6-only domain (resolves to IPv6)
-curl -x socks5://testgroup:testpass@127.0.0.1:10800 \
+curl -x socks5h://testgroup:testpass@127.0.0.1:10800 \
   --ipv6 \
   http://example.com
 
@@ -277,24 +315,6 @@ curl http://127.0.0.1:17500/api/socks5relay/connections \
 ```
 
 Expected output for IPv6: `"dstAddr": "2606:2800:220:1:248:1893:25c8:1946"` (displayed as `[2606:2800:220:1:248:1893:25c8:1946]:80` in dashboard)
-
-### Domain vs IP Display
-
-Test difference between local DNS resolution and proxy-side DNS:
-
-```bash
-# Mode 1: Local DNS resolution (curl default)
-curl -x socks5://testgroup:testpass@127.0.0.1:10800 http://example.com
-# Dashboard shows: IP address like 93.184.216.34:80
-
-# Mode 2: Proxy-side DNS resolution
-curl --socks5-hostname testgroup:testpass@127.0.0.1:10800 http://example.com
-# Dashboard shows: example.com:80
-
-# Verify
-curl http://127.0.0.1:17500/api/socks5relay/connections \
-  -H "Authorization: Basic YWRtaW46YWRtaW4=" | jq '.[-1].dstAddr'
-```
 
 ### Retention Validation
 
@@ -376,13 +396,39 @@ auth.token = "test"
 name = "relay-test"
 type = "socks5_relay"
 group = "testgroup"
+# Optional: outbound proxy for target connections
+# outboundProxy = "http://user:pass@proxy-host:port"
+```
+
+### Outbound Proxy for Target Connections
+
+frpc can route relay target connections through an outbound proxy. Proxy lookup priority:
+
+1. `outboundProxy` field in socks5_relay proxy config
+2. `RELAY_PROXY` / `relay_proxy` environment variable (dedicated for relay, won't affect frpc→frps)
+3. Direct connection (no proxy)
+
+`RELAY_PROXY` is separate from `HTTP_PROXY`/`HTTPS_PROXY` which only affect the frpc→frps connection.
+
+```bash
+# Option 1: RELAY_PROXY env var (dedicated for socks5_relay targets)
+export RELAY_PROXY=http://user:pass@proxy-host:port
+./bin/frpc -c frpc.toml
+
+# Option 2: Per-proxy config
+# outboundProxy = "socks5://user:pass@proxy-host:port"
+
+# Different proxies for frpc→frps vs relay→target:
+export HTTP_PROXY=http://proxyA:8080          # frpc→frps uses this
+export RELAY_PROXY=http://proxyB:8080         # relay→target uses this
+./bin/frpc -c frpc.toml
 ```
 
 ## Test Checklist
 
 ### Basic Functionality
-- [ ] SOCKS5 proxy with HTTP
-- [ ] SOCKS5 proxy with HTTPS
+- [ ] SOCKS5 proxy with HTTP (`socks5h://`)
+- [ ] SOCKS5 proxy with HTTPS (`socks5h://`)
 - [ ] HTTP CONNECT proxy with HTTPS
 - [ ] Both protocols visible in dashboard
 
@@ -402,7 +448,8 @@ group = "testgroup"
 - [ ] Retention resets to default (10min) on restart
 
 ### Address Display
+- [ ] Domain names display correctly with `socks5h://`
 - [ ] IPv4 addresses display correctly (addr:port)
 - [ ] IPv6 addresses display correctly ([addr]:port)
-- [ ] Domain names display when using --socks5-hostname
-- [ ] IP addresses display when using -x (local DNS)
+- [ ] Dashboard shows domain when using `socks5h://`
+- [ ] Dashboard shows IP when using `socks5://` (local DNS)

@@ -23,4 +23,5 @@ export interface ServerInfo {
   // SOCKS5 Relay
   socks5ProxyPort: number
   httpConnectProxyPort: number
+  webServerPort: number
 }

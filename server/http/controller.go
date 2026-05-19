@@ -82,6 +82,7 @@ func (c *Controller) APIServerInfo(ctx *httppkg.Context) (any, error) {
 
 		Socks5ProxyPort:      c.serverCfg.Socks5ProxyPort,
 		HTTPConnectProxyPort: c.serverCfg.HTTPConnectProxyPort,
+		WebServerPort:        c.serverCfg.WebServer.Port,
 	}
 
 	return svrResp, nil
