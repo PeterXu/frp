@@ -38,8 +38,12 @@ func (pxy *Socks5RelayServerProxy) Run() (remoteAddr string, err error) {
 	rc := pxy.GetResourceController()
 	runID := pxy.GetLoginMsg().RunID
 
-	rc.Socks5RelayGroupRegistry.Register(pxy.cfg.Group, runID, pxy.cfg.Name)
-	pxy.xl.Infof("socks5_relay proxy registered group [%s] with runID [%s]", pxy.cfg.Group, runID)
+	group := ""
+	if metas := pxy.GetLoginMsg().Metas; metas != nil {
+		group = metas["group"]
+	}
+	rc.Socks5RelayGroupRegistry.Register(group, runID, pxy.cfg.Name)
+	pxy.xl.Infof("socks5_relay proxy registered group [%s] with runID [%s]", group, runID)
 	return "", nil
 }
 

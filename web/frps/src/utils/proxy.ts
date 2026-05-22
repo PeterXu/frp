@@ -150,11 +150,9 @@ class SUDPProxy extends BaseProxy {
 }
 
 class Socks5RelayProxy extends BaseProxy {
-  group: string
   constructor(proxyStats: any) {
     super(proxyStats)
     this.type = 'socks5_relay'
-    this.group = proxyStats.conf?.group || ''
   }
 }
 

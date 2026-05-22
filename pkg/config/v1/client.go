@@ -37,6 +37,9 @@ type ClientCommonConfig struct {
 	// clients. If this value is not "", proxy names will automatically be
 	// changed to "{user}.{proxy_name}".
 	User string `json:"user,omitempty"`
+	// Group specifies the socks5_relay group for this client. When TLS certificate
+	// has OU field, it overrides this value.
+	Group string `json:"group,omitempty"`
 	// ClientID uniquely identifies this frpc instance.
 	ClientID string `json:"clientID,omitempty"`
 

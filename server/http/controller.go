@@ -356,7 +356,7 @@ func getConfFromConfigurer(cfg v1.ProxyConfigurer) any {
 	case *v1.XTCPProxyConfig:
 		return &model.XTCPOutConf{BaseOutConf: outBase}
 	case *v1.Socks5RelayProxyConfig:
-		return &model.Socks5RelayOutConf{BaseOutConf: outBase, Group: c.Group}
+		return &model.Socks5RelayOutConf{BaseOutConf: outBase}
 	}
 	return outBase
 }

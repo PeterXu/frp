@@ -102,7 +102,6 @@ type XTCPOutConf struct {
 
 type Socks5RelayOutConf struct {
 	BaseOutConf
-	Group string `json:"group"`
 }
 
 type Socks5RelayGroupInfo struct {

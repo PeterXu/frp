@@ -395,7 +395,6 @@ auth.token = "test"
 [[proxies]]
 name = "relay-test"
 type = "socks5_relay"
-group = "testgroup"
 # Optional: outbound proxy for target connections
 # outboundProxy = "http://user:pass@proxy-host:port"
 ```

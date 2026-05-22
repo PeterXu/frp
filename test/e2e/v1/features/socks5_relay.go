@@ -45,10 +45,11 @@ socks5ProxyAuthPassword = "testpass"
 
 		// Client config with socks5_relay proxy
 		clientConf := consts.DefaultClientConfig + fmt.Sprintf(`
+group = "testgroup"
+
 [[proxies]]
 name = "relay-test"
 type = "socks5_relay"
-group = "testgroup"
 `)
 
 		f.RunProcesses(serverConf, []string{clientConf})
