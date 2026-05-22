@@ -1,0 +1,316 @@
+# frpc Production Configuration Template
+# Copy to /opt/frp/config/machine-X/frpc.toml and customize
+#
+# Field order follows conf/frpc_full_example.toml
+
+# Optional unique identifier for this frpc instance.
+# clientID = "your_client_id"
+
+# your proxy name will be changed to {user}.{proxy}
+user = "test001"
+
+# frps server address
+serverAddr = "domain_or_ip"
+
+# frps server port
+serverPort = 3001
+
+# STUN server to help penetrate NAT hole.
+# natHoleStunServer = "stun.easyvoip.com:3478"
+
+# Decide if exit program when first login failed, otherwise continuous relogin to frps
+# default is true
+loginFailExit = false
+
+# console or real logFile path like ./frpc.log
+log.to = "/var/log/frp/frpc.log"
+# trace, debug, info, warn, error
+log.level = "info"
+log.maxDays = 3
+# disable log colors when log.to is console, default is false
+log.disablePrintColor = false
+
+# auth.method specifies what authentication method to use.
+# By default, this value is "token".
+# auth.method = "token"
+
+# auth.additionalScopes specifies additional scopes to include authentication information.
+# Optional values are HeartBeats, NewWorkConns.
+# auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
+
+# GENERATE STRONG TOKEN: openssl rand -hex 32 (MUST match frps configuration)
+auth.token = "CHANGE_ME_GENERATE_STRONG_TOKEN_HERE"
+
+# alternatively, you can use tokenSource to load the token from a file
+# this is mutually exclusive with auth.token
+# auth.tokenSource.type = "file"
+# auth.tokenSource.file.path = "/etc/frp/token"
+
+# OIDC settings (only used if auth.method = "oidc")
+# auth.oidc.clientID = ""
+# auth.oidc.clientSecret = ""
+# auth.oidc.audience = ""
+# auth.oidc.scope = ""
+# auth.oidc.tokenEndpointURL = ""
+# auth.oidc.additionalEndpointParams.audience = "https://dev.auth.com/api/v2/"
+# auth.oidc.additionalEndpointParams.var1 = "foobar"
+# auth.oidc.trustedCaFile = "/path/to/ca.crt"
+# auth.oidc.insecureSkipVerify = false
+# auth.oidc.proxyURL = "http://proxy.example.com:8080"
+
+# Admin UI for frpc (optional)
+webServer.addr = "127.0.0.1"
+webServer.port = 7400
+webServer.user = "admin"
+webServer.password = "admin"
+#webServer.assetsDir = "./web/frpc/dist"
+
+# The maximum amount of time a dial to server will wait for a connect to complete. Default value is 10 seconds.
+# transport.dialServerTimeout = 10
+
+# dialServerKeepalive specifies the interval between keep-alive probes for an active network connection.
+# If negative, keep-alive probes are disabled.
+# transport.dialServerKeepalive = 7200
+
+# connections will be established in advance, default value is zero
+# transport.poolCount = 5
+
+# If tcp stream multiplexing is used, default is true, it must be same with frps
+# transport.tcpMux = true
+
+# Specify keep alive interval for tcp mux.
+# only valid if tcpMux is enabled.
+# transport.tcpMuxKeepaliveInterval = 30
+
+# Communication protocol used to connect to server
+# supports tcp, kcp, quic, websocket and wss now, default is tcp
+transport.protocol = "tcp"
+
+# FRP wire protocol used inside the selected transport.
+# supports v1 and v2, default is v1.
+# transport.wireProtocol = "v1"
+
+# set client binding ip when connect server, default is empty.
+# only when protocol = tcp or websocket, the value will be used.
+# transport.connectServerLocalIP = "0.0.0.0"
+
+# if you want to connect frps by http proxy or socks5 proxy or ntlm proxy, you can set proxyURL here
+# it only works when protocol is tcp
+# transport.proxyURL = "http://user:passwd@192.168.1.128:8080"
+# transport.proxyURL = "socks5://user:passwd@192.168.1.128:1080"
+# transport.proxyURL = "ntlm://user:passwd@192.168.1.128:2080"
+
+# QUIC protocol options
+# transport.quic.keepalivePeriod = 10
+# transport.quic.maxIdleTimeout = 30
+# transport.quic.maxIncomingStreams = 100000
+
+# If tls.enable is true, frpc will connect frps by tls.
+# Since v0.50.0, the default value has been changed to true, and tls is enabled by default.
+# transport.tls.enable = true
+# transport.tls.certFile = "client.crt"
+# transport.tls.keyFile = "client.key"
+# transport.tls.trustedCaFile = "ca.crt"
+# transport.tls.serverName = "example.com"
+
+# If the disableCustomTLSFirstByte is set to false, frpc will establish a connection with frps
+# using the first custom byte when tls is enabled.
+# transport.tls.disableCustomTLSFirstByte = true
+
+# Heartbeat configure, it's not recommended to modify the default value.
+# The default value of heartbeatInterval is 10 and heartbeatTimeout is 90.
+# Set negative value to disable it.
+# transport.heartbeatInterval = 30
+# transport.heartbeatTimeout = 90
+
+# Specify a dns server, so frpc will use this instead of default one
+# dnsServer = "8.8.8.8"
+
+# Proxy names you want to start. Default is empty, means all proxies.
+# start = ["ssh", "dns"]
+
+# specify udp packet size, unit is byte. If not set, the default value is 1500.
+# udpPacketSize = 1500
+
+# Feature gates allows you to enable or disable experimental features
+# featureGates = { VirtualNet = true }
+
+# VirtualNet settings for experimental virtual network capabilities
+# virtualNet.address = "100.86.1.1/24"
+
+# Additional metadatas for client.
+# metadatas.var1 = "abc"
+# metadatas.var2 = "123"
+
+# Include other config files for proxies.
+# includes = ["./confd/*.ini"]
+
+# ============================================================================
+# Proxy Configuration Examples
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# TCP Proxy (Single Service)
+# ----------------------------------------------------------------------------
+
+#[[proxies]]
+# 'ssh' is the unique proxy name
+#name = "ssh"
+#type = "tcp"
+#localIP = "127.0.0.1"
+#localPort = 22
+# Remote port listen by frps
+#remotePort = 6000
+
+# ----------------------------------------------------------------------------
+# HTTP Proxy with Custom Domain
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "web-service"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# customDomains = ["app.example.com"]
+#
+# # Optional: HTTP authentication
+# httpUser = "user"
+# httpPassword = "password"
+#
+# # Optional: Host header rewrite
+# hostHeaderRewrite = "backend.local"
+#
+# # Optional: Set headers
+# requestHeaders.set.x-from-where = "frp"
+
+# ----------------------------------------------------------------------------
+# HTTPS Proxy
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "web-secure"
+# type = "https"
+# localIP = "127.0.0.1"
+# localPort = 8443
+# customDomains = ["secure.example.com"]
+
+# ----------------------------------------------------------------------------
+# Load Balancing Group (Multiple Backends)
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "app-backend-1"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# customDomains = ["app.example.com"]
+# loadBalancer.group = "app"
+# loadBalancer.groupKey = "app-group-secret-key"
+#
+# # Health check (recommended for load balancing)
+# healthCheck.type = "http"
+# healthCheck.path = "/health"
+# healthCheck.timeoutSeconds = 3
+# healthCheck.maxFailed = 3
+# healthCheck.intervalSeconds = 10
+
+# [[proxies]]
+# name = "app-backend-2"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 8081
+# customDomains = ["app.example.com"]
+# loadBalancer.group = "app"
+# loadBalancer.groupKey = "app-group-secret-key"
+#
+# healthCheck.type = "http"
+# healthCheck.path = "/health"
+# healthCheck.timeoutSeconds = 3
+# healthCheck.maxFailed = 3
+# healthCheck.intervalSeconds = 10
+
+# ----------------------------------------------------------------------------
+# Secure TCP Proxy (STCP)
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "secret-ssh"
+# type = "stcp"
+# secretKey = "ssh-secret-key"
+# localIP = "127.0.0.1"
+# localPort = 22
+# allowUsers = ["user1", "user2"]
+
+# ----------------------------------------------------------------------------
+# UDP Proxy
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "dns"
+# type = "udp"
+# localIP = "127.0.0.1"
+# localPort = 53
+# remotePort = 6053
+
+# ----------------------------------------------------------------------------
+# TCP Multiplexing
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "tcpmux-http"
+# type = "tcpmux"
+# multiplexer = "httpconnect"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# customDomains = ["tcpmux.example.com"]
+
+# ----------------------------------------------------------------------------
+# SOCKS5 Relay Proxy
+# ----------------------------------------------------------------------------
+
+[[proxies]]
+name = "socks5-relay-proxy"
+type = "socks5_relay"
+group = "socks5_group"
+# # groupKey = "optional-group-secret"
+# # outboundProxy = "optional-outbound-proxy-name"
+
+# ----------------------------------------------------------------------------
+# Bandwidth Limit
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "limited-service"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# remotePort = 7000
+# transport.bandwidthLimit = "1MB"
+# transport.bandwidthLimitMode = "server"
+
+# ----------------------------------------------------------------------------
+# Encryption and Compression
+# ----------------------------------------------------------------------------
+
+# [[proxies]]
+# name = "secure-service"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# remotePort = 7000
+# transport.useEncryption = true
+# transport.useCompression = true
+
+# ============================================================================
+# Visitor Configuration (For STCP/SUDP/XTCP)
+# ============================================================================
+
+# [[visitors]]
+# name = "secret-ssh-visitor"
+# type = "stcp"
+# serverName = "secret-ssh"
+# secretKey = "ssh-secret-key"
+# bindPort = 6001
+
+#[store]
+#path = "./db.json"
