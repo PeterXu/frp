@@ -63,24 +63,24 @@ webServer.addr = "127.0.0.1"
 webServer.port = 7400
 webServer.user = "admin"
 webServer.password = "admin"
-#webServer.assetsDir = "./web/frpc/dist"
+# webServer.assetsDir = "./web/frpc/dist"
 
 # The maximum amount of time a dial to server will wait for a connect to complete. Default value is 10 seconds.
-# transport.dialServerTimeout = 10
+transport.dialServerTimeout = 10
 
 # dialServerKeepalive specifies the interval between keep-alive probes for an active network connection.
 # If negative, keep-alive probes are disabled.
-# transport.dialServerKeepalive = 7200
+transport.dialServerKeepalive = 600
 
 # connections will be established in advance, default value is zero
-# transport.poolCount = 5
+transport.poolCount = 2
 
 # If tcp stream multiplexing is used, default is true, it must be same with frps
-# transport.tcpMux = true
+transport.tcpMux = true
 
 # Specify keep alive interval for tcp mux.
 # only valid if tcpMux is enabled.
-# transport.tcpMuxKeepaliveInterval = 30
+transport.tcpMuxKeepaliveInterval = 30
 
 # Communication protocol used to connect to server
 # supports tcp, kcp, quic, websocket and wss now, default is tcp
