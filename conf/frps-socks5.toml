@@ -66,11 +66,11 @@ transport.tcpMux = true
 # tcpmuxPassthrough = false
 
 # SOCKS5 proxy listener port, 0 means disabled
-socks5ProxyPort = 1080
+socks5ProxyPort = 1081
 socks5ProxyAuthPassword = "socks5"
 
 # HTTP CONNECT proxy listener port, 0 means disabled
-httpConnectProxyPort = 1087
+httpConnectProxyPort = 1083
 httpConnectProxyAuthPassword = "https"
 
 # Retention time for closed connections display in dashboard (default: 600 = 10 minutes)
