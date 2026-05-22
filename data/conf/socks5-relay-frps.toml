@@ -11,7 +11,7 @@ bindPort = 7000
 
 # UDP port used for kcp protocol, it can be same with 'bindPort'.
 # if not set, kcp is disabled in frps.
-# kcpBindPort = 7000
+kcpBindPort = 7000
 
 # UDP port used for quic protocol.
 # if not set, quic is disabled in frps.
@@ -30,10 +30,10 @@ bindPort = 7000
 # transport.heartbeatTimeout = 90
 
 # Pool count in each proxy will keep no more than maxPoolCount.
-# transport.maxPoolCount = 5
+transport.maxPoolCount = 3
 
 # If tcp stream multiplexing is used, default is true
-# transport.tcpMux = true
+transport.tcpMux = true
 
 # Specify keep alive interval for tcp mux.
 # only valid if tcpMux is true.
@@ -51,7 +51,6 @@ transport.tls.certFile = "/certs/server.crt"
 transport.tls.keyFile = "/certs/server.key"
 transport.tls.trustedCaFile = "/certs/ca.crt"
 
-transport.proxyProtocol = true
 
 # If you want to support virtual host, you must set the http port for listening (optional)
 # Note: http port and https port can be same with bindPort
@@ -80,7 +79,7 @@ httpConnectProxyAuthPassword = "https"
 
 # Configure the web server to enable the dashboard for frps.
 # dashboard is available only if webServer.port is set.
-webServer.addr = "0.0.0.0"
+webServer.addr = "127.0.0.1"
 webServer.port = 7500
 webServer.user = "admin"
 # GENERATE STRONG PASSWORD: openssl rand -base64 16
