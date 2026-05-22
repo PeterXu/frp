@@ -12,6 +12,7 @@ _test
 *.prof
 
 # Self
+data/
 bin/
 packages/
 release/
