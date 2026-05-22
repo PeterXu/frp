@@ -29,7 +29,8 @@ func init() {
 
 type Socks5RelayProxy struct {
 	*BaseProxy
-	cfg *v1.Socks5RelayProxyConfig
+	cfg       *v1.Socks5RelayProxyConfig
+	tokenPool chan struct{} // semaphore for concurrent connection limiting
 }
 
 func NewSocks5RelayProxy(baseProxy *BaseProxy, cfg v1.ProxyConfigurer) Proxy {
@@ -37,10 +38,15 @@ func NewSocks5RelayProxy(baseProxy *BaseProxy, cfg v1.ProxyConfigurer) Proxy {
 	if !ok {
 		return nil
 	}
-	return &Socks5RelayProxy{
+	pxy := &Socks5RelayProxy{
 		BaseProxy: baseProxy,
 		cfg:       unwrapped,
 	}
+	// Initialize token pool if maxConcurrent > 0 (empty channel, acts as semaphore)
+	if unwrapped.MaxConcurrent > 0 {
+		pxy.tokenPool = make(chan struct{}, unwrapped.MaxConcurrent)
+	}
+	return pxy
 }
 
 func (pxy *Socks5RelayProxy) Run() error {
@@ -54,6 +60,13 @@ func (pxy *Socks5RelayProxy) Run() error {
 // so per-proxy encryption wrapping is not applicable.
 func (pxy *Socks5RelayProxy) InWorkConn(conn net.Conn, m *msg.StartWorkConn) {
 	xl := pxy.xl
+
+	// Acquire token from pool - blocks if channel is full (limit reached)
+	// Requests will wait until a previous request completes and releases its token
+	if pxy.tokenPool != nil {
+		pxy.tokenPool <- struct{}{} // acquire: send blocks if channel full
+		defer func() { <-pxy.tokenPool }() // release: receive frees a slot
+	}
 
 	if m.DstAddr == "" || m.DstPort == 0 {
 		xl.Errorf("missing target address in StartWorkConn message")
@@ -93,7 +106,7 @@ func (pxy *Socks5RelayProxy) InWorkConn(conn net.Conn, m *msg.StartWorkConn) {
 }
 
 func (pxy *Socks5RelayProxy) Close() {
-	// nothing to clean up
+	// No cleanup needed - channel garbage collected when proxy stops
 }
 
 // dialViaProxyURL dials the target address through the specified proxy URL.
