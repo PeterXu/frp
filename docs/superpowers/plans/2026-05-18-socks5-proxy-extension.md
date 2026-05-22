@@ -1246,7 +1246,6 @@ httpConnectProxyAuthPassword = "testpass"
 [[proxies]]
 name = "relay-test"
 type = "socks5_relay"
-group = "testgroup"
 `)
 
 		f.RunProcesses(serverConf, []string{clientConf})

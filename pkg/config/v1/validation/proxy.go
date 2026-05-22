@@ -168,9 +168,6 @@ func validateSUDPProxyConfigForClient(c *v1.SUDPProxyConfig) error {
 }
 
 func validateSocks5RelayProxyConfigForClient(c *v1.Socks5RelayProxyConfig) error {
-	if c.Group == "" {
-		return errors.New("group should not be empty")
-	}
 	return nil
 }
 
@@ -250,9 +247,6 @@ func validateSUDPProxyConfigForServer(c *v1.SUDPProxyConfig, s *v1.ServerConfig)
 }
 
 func validateSocks5RelayProxyConfigForServer(c *v1.Socks5RelayProxyConfig, s *v1.ServerConfig) error {
-	if c.Group == "" {
-		return errors.New("group should not be empty")
-	}
 	return nil
 }
 

@@ -99,7 +99,7 @@ Storage: frps side in-memory (reassign after restart)
 ### 5. frpc Group Management
 
 Reuse FRP existing group mechanism via proxy type:
-- frpc config declares group membership in socks5_relay proxy (`group = "groupA"`)
+- frpc config declares group membership in socks5_relay proxy
 - frpc dynamically registers with frps on startup via NewProxy message
 - groupKey verifies same group members
 
@@ -141,7 +141,6 @@ Config example (frpc):
 [[proxies]]
 name = "relay-groupA"
 type = "socks5_relay"
-group = "groupA"
 outboundProxy = "socks5://local-proxy:1080"
 ```
 
@@ -208,8 +207,6 @@ serverPort = 7000
 [[proxies]]
 name = "relay-groupA"
 type = "socks5_relay"
-group = "groupA"
-groupKey = "secret123"
 
 # Optional: outbound via proxy
 # outboundProxy = "socks5://local-proxy:1080"

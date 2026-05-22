@@ -9,6 +9,9 @@
 # your proxy name will be changed to {user}.{proxy}
 user = "test001"
 
+# socks5_relay group (overridden by TLS cert OU when cert is configured)
+# group = "socks5_group"
+
 # frps server address
 serverAddr = "domain_or_ip"
 
@@ -272,8 +275,6 @@ transport.protocol = "tcp"
 [[proxies]]
 name = "socks5-relay-proxy"
 type = "socks5_relay"
-group = "socks5_group"
-# # groupKey = "optional-group-secret"
 # # outboundProxy = "optional-outbound-proxy-name"
 # Token pool size: requests wait (block) when limit reached until a token is released
 # 0 = unlimited, recommended: 3-10 for typical usage
