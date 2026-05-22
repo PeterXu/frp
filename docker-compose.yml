@@ -17,8 +17,8 @@ services:
     ports:
       - "7000:7000"
       - "7500:7500"
-      - "1080:1080"
-      - "1087:1087"
+      - "1081:1081"
+      - "1083:1083"
     volumes:
       - ./data/conf:/conf:ro
       - ./data/certs:/certs:ro
