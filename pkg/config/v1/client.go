@@ -175,6 +175,11 @@ type TLSClientConfig struct {
 	// first custom byte when tls is enabled.
 	// Since v0.50.0, the default value has been changed to true, and the first custom byte is disabled by default.
 	DisableCustomTLSFirstByte *bool `json:"disableCustomTLSFirstByte,omitempty"`
+	// SkipServerNameVerify skips TLS server name verification while still
+	// verifying the server's certificate chain. This is useful when the
+	// server certificate's CN/SAN doesn't match the connection hostname.
+	// When set to true, the certificate chain and expiration are still verified.
+	SkipServerNameVerify bool `json:"skipServerNameVerify,omitempty"`
 
 	TLSConfig
 }

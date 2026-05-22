@@ -113,9 +113,10 @@ func (c *defaultConnectorImpl) Open() error {
 				c.cfg.Transport.TLS.CertFile,
 				c.cfg.Transport.TLS.KeyFile,
 				c.cfg.Transport.TLS.TrustedCaFile,
-				sn)
+				sn,
+				c.cfg.Transport.TLS.SkipServerNameVerify)
 		} else {
-			tlsConfig, err = transport.NewClientTLSConfig("", "", "", sn)
+			tlsConfig, err = transport.NewClientTLSConfig("", "", "", sn, false)
 		}
 		if err != nil {
 			xl.Warnf("fail to build tls configuration, err: %v", err)
@@ -198,7 +199,8 @@ func (c *defaultConnectorImpl) realConnect() (net.Conn, error) {
 			c.cfg.Transport.TLS.CertFile,
 			c.cfg.Transport.TLS.KeyFile,
 			c.cfg.Transport.TLS.TrustedCaFile,
-			sn)
+			sn,
+			c.cfg.Transport.TLS.SkipServerNameVerify)
 		if err != nil {
 			xl.Warnf("fail to build tls configuration, err: %v", err)
 			return nil, err
