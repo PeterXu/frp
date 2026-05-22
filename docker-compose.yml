@@ -13,7 +13,7 @@ services:
       dockerfile: dockerfiles/Dockerfile-for-frps
     image: frps:local
     restart: always
-    command: -c /conf/socks5-relay-frps.toml
+    command: -c /conf/frps-socks5.toml
     ports:
       - "7000:7000"
       - "7500:7500"
@@ -26,8 +26,8 @@ services:
     environment:
       - TZ=Asia/Shanghai
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:7500/healthz || exit 1"]
-      #test: ["CMD-SHELL", "curl -f http://localhost:7500/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:7500/healthz || exit 1"]
+      #test: ["CMD-SHELL", "curl -f http://127.0.0.1:7500/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

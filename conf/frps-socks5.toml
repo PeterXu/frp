@@ -47,9 +47,14 @@ transport.tcpMux = true
 # transport.tls.force = false
 
 # TLS cert/key for encrypted connections
-#transport.tls.certFile = "/certs/server.crt"
-#transport.tls.keyFile = "/certs/server.key"
-#transport.tls.trustedCaFile = "/certs/ca.crt"
+# transport.tls.certFile = "/certs/server.crt"
+# transport.tls.keyFile = "/certs/server.key"
+# transport.tls.trustedCaFile = "/certs/ca.crt"
+
+# This lets frps read the PROXY protocol header before the TLS handshake, 
+# so it gets the real client IP while still accepting TLS connections.
+# Required to set true when nginx stream with proxy_protocol on; 
+# transport.proxyProtocol = false
 
 # If you want to support virtual host, you must set the http port for listening (optional)
 # Note: http port and https port can be same with bindPort
