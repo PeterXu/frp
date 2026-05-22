@@ -125,7 +125,7 @@ func NewServerTLSConfig(certPath, keyPath, caPath string) (*tls.Config, error) {
 	return base, nil
 }
 
-func NewClientTLSConfig(certPath, keyPath, caPath, serverName string) (*tls.Config, error) {
+func NewClientTLSConfig(certPath, keyPath, caPath, serverName string, skipServerNameVerify bool) (*tls.Config, error) {
 	base := &tls.Config{}
 
 	if certPath != "" && keyPath != "" {
@@ -146,8 +146,27 @@ func NewClientTLSConfig(certPath, keyPath, caPath, serverName string) (*tls.Conf
 		}
 
 		base.RootCAs = pool
-		base.InsecureSkipVerify = false
+		if skipServerNameVerify {
+			// Skip server name verification but still verify certificate chain.
+			// We use InsecureSkipVerify with a custom VerifyConnection callback
+			// that manually verifies the certificate chain without checking hostname.
+			base.InsecureSkipVerify = true
+			base.VerifyConnection = func(state tls.ConnectionState) error {
+				opts := x509.VerifyOptions{
+					Roots:         base.RootCAs,
+					Intermediates: x509.NewCertPool(),
+				}
+				for _, cert := range state.PeerCertificates[1:] {
+					opts.Intermediates.AddCert(cert)
+				}
+				_, err := state.PeerCertificates[0].Verify(opts)
+				return err
+			}
+		} else {
+			base.InsecureSkipVerify = false
+		}
 	} else {
+		// No CA provided, skip all verification (including server name)
 		base.InsecureSkipVerify = true
 	}
 

@@ -112,6 +112,7 @@ transport.protocol = "tcp"
 # transport.tls.keyFile = "client.key"
 # transport.tls.trustedCaFile = "ca.crt"
 # transport.tls.serverName = "example.com"
+# transport.tls.skipServerNameVerify = true
 
 # If the disableCustomTLSFirstByte is set to false, frpc will establish a connection with frps
 # using the first custom byte when tls is enabled.
