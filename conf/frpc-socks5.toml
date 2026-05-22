@@ -275,6 +275,9 @@ type = "socks5_relay"
 group = "socks5_group"
 # # groupKey = "optional-group-secret"
 # # outboundProxy = "optional-outbound-proxy-name"
+# Token pool size: requests wait (block) when limit reached until a token is released
+# 0 = unlimited, recommended: 3-10 for typical usage
+maxConcurrent = 3
 
 # ----------------------------------------------------------------------------
 # Bandwidth Limit

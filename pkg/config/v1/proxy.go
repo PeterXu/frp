@@ -543,6 +543,10 @@ type Socks5RelayProxyConfig struct {
 	Group         string `json:"group,omitempty"`
 	GroupKey      string `json:"groupKey,omitempty"`
 	OutboundProxy string `json:"outboundProxy,omitempty"`
+	// MaxConcurrent limits the number of concurrent relay connections using a token pool.
+	// When limit is reached, new requests will wait (block) until a token becomes available.
+	// Default is 0 (unlimited). Recommended range: 3-10 for typical usage.
+	MaxConcurrent int `json:"maxConcurrent,omitempty"`
 }
 
 func (c *Socks5RelayProxyConfig) MarshalToMsg(m *msg.NewProxy) {
