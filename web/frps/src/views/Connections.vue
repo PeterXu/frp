@@ -60,7 +60,7 @@
         <el-tabs v-model="activeTab">
           <el-tab-pane label="Active Connections" name="active">
             <div v-if="activeConnections.length > 0">
-              <el-table :data="activeConnections">
+              <el-table :data="paginatedActiveConnections">
                 <el-table-column prop="sourceIP" label="Source" width="180" />
                 <el-table-column prop="protocol" label="Protocol" width="130">
                   <template #default="{ row }">
@@ -87,6 +87,17 @@
                   </template>
                 </el-table-column>
               </el-table>
+              <div class="pagination-container">
+                <el-pagination
+                  v-model:current-page="activeCurrentPage"
+                  v-model:page-size="pageSize"
+                  :page-sizes="[20, 50, 100, 200]"
+                  :total="activeConnections.length"
+                  layout="total, sizes, prev, pager, next"
+                  background
+                  small
+                />
+              </div>
             </div>
             <div v-else-if="!loading">
               <el-empty description="No active connections" />
@@ -98,7 +109,7 @@
               Recent Connections <el-badge v-if="recentConnections.length > 0" :value="recentConnections.length" />
             </template>
             <div v-if="recentConnections.length > 0">
-              <el-table :data="recentConnections">
+              <el-table :data="paginatedRecentConnections">
                 <el-table-column prop="sourceIP" label="Source" width="180" />
                 <el-table-column prop="protocol" label="Protocol" width="130">
                   <template #default="{ row }">
@@ -130,6 +141,17 @@
                   </template>
                 </el-table-column>
               </el-table>
+              <div class="pagination-container">
+                <el-pagination
+                  v-model:current-page="recentCurrentPage"
+                  v-model:page-size="pageSize"
+                  :page-sizes="[20, 50, 100, 200]"
+                  :total="recentConnections.length"
+                  layout="total, sizes, prev, pager, next"
+                  background
+                  small
+                />
+              </div>
             </div>
             <div v-else-if="!loading">
               <el-empty description="No recent connections" />
@@ -180,6 +202,14 @@ const loading = ref(false)
 const autoRefresh = ref(true)
 const activeTab = ref('active')
 
+// Pagination settings
+const pageSize = ref(50)
+const activeCurrentPage = ref(1)
+const recentCurrentPage = ref(1)
+
+// Connection index map for fast SSE event lookup (id -> array index)
+const connectionIndexMap = new Map<string, number>()
+
 // Retention settings
 const retentionSeconds = ref(600) // Default 10 minutes
 const tempRetention = ref(600)
@@ -191,9 +221,20 @@ const activeConnections = computed(() => {
 })
 
 const recentConnections = computed(() => {
-  return allConnections.value
-    .filter(c => !c.isActive)
-    .sort((a, b) => (b.endTime || 0) - (a.endTime || 0))
+  return allConnections.value.filter(c => !c.isActive)
+})
+
+// Paginated connections for display
+const paginatedActiveConnections = computed(() => {
+  const start = (activeCurrentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return activeConnections.value.slice(start, end)
+})
+
+const paginatedRecentConnections = computed(() => {
+  const start = (recentCurrentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return recentConnections.value.slice(start, end)
 })
 
 // Stats based on all connections (active + recent)
@@ -234,7 +275,24 @@ const formatTimeAgo = (timestamp: number): string => {
 const fetchData = async () => {
   loading.value = true
   try {
-    allConnections.value = await getSocks5RelayConnections()
+    const connections = await getSocks5RelayConnections()
+    // Sort once on fetch: active connections first, then closed by endTime descending
+    connections.sort((a, b) => {
+      if (a.isActive !== b.isActive) {
+        return a.isActive ? -1 : 1 // active first
+      }
+      if (!a.isActive && !b.isActive) {
+        // Closed connections: most recently closed first (endTime descending)
+        return (b.endTime || 0) - (a.endTime || 0)
+      }
+      return 0
+    })
+    allConnections.value = connections
+    // Rebuild index map for fast SSE lookup
+    connectionIndexMap.clear()
+    allConnections.value.forEach((conn, index) => {
+      connectionIndexMap.set(conn.id, index)
+    })
     await fetchRetention()
   } catch (error: any) {
     ElMessage({
@@ -293,32 +351,47 @@ const updateRetention = async () => {
   }
 }
 
-// Handle SSE connection events
-const handleConnectionEvent = (event: any) => {
+// Handle SSE connection events using Map for O(1) lookup
+const handleConnectionEvent = (event: { type: string; conn: RelayConnectionInfo }) => {
   const conn = event.conn
 
   if (event.type === 'created') {
-    // Add new connection
-    const index = allConnections.value.findIndex(c => c.id === conn.id)
-    if (index === -1) {
-      allConnections.value.push(conn)
-    }
+    // Add new connection - append to end and update index
+    const newIndex = allConnections.value.length
+    allConnections.value.push(conn)
+    connectionIndexMap.set(conn.id, newIndex)
   } else if (event.type === 'updated') {
-    // Update existing connection
-    const index = allConnections.value.findIndex(c => c.id === conn.id)
-    if (index !== -1) {
+    // Update connection using Map index (O(1) lookup)
+    const index = connectionIndexMap.get(conn.id)
+    if (index !== undefined && index < allConnections.value.length) {
       allConnections.value[index] = conn
     }
   } else if (event.type === 'deleted') {
-    // Move connection from active to recent
-    const index = allConnections.value.findIndex(c => c.id === conn.id)
-    if (index !== -1) {
-      allConnections.value[index] = conn
+    // Connection closed - move it to the front of closed connections section
+    // This maintains most-recently-closed-first order without re-sorting
+    const index = connectionIndexMap.get(conn.id)
+    if (index !== undefined && index < allConnections.value.length) {
+      // Remove from current position first
+      allConnections.value.splice(index, 1)
+
+      // Now find the first closed connection position (after removal)
+      const firstClosedIndex = allConnections.value.findIndex(c => !c.isActive)
+      const insertIndex = firstClosedIndex === -1 ? allConnections.value.length : firstClosedIndex
+
+      // Insert at front of closed section
+      allConnections.value.splice(insertIndex, 0, conn)
+
+      // Rebuild index map (positions shifted)
+      connectionIndexMap.clear()
+      allConnections.value.forEach((c, i) => {
+        connectionIndexMap.set(c.id, i)
+      })
     }
   }
 }
 
 let eventSource: EventSource | null = null
+let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
   await fetchData()
@@ -362,13 +435,16 @@ onMounted(async () => {
     console.error('SSE error:', err)
   }
 
-  // Periodic refresh every 30 seconds as fallback
-  setInterval(fetchData, 30000)
+  // Periodic refresh every 2 minutes as fallback for SSE connection issues
+  refreshInterval = setInterval(fetchData, 120000)
 })
 
 onUnmounted(() => {
   if (eventSource) {
     eventSource.close()
+  }
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
   }
 })
 </script>
@@ -463,6 +539,12 @@ html.dark .status-card {
 
 .clickable:active {
   transform: translateY(0);
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 0 0;
 }
 
 @media (max-width: 768px) {
