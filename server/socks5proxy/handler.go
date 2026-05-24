@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 
 	libio "github.com/fatedier/golib/io"
@@ -26,23 +27,20 @@ import (
 type SOCKS5Handler struct {
 	listener     net.Listener
 	authPassword string
-	selectFrpcFn func(username string, dstAddr string, dstPort uint16) (net.Conn, error)
-	getMetaFn    func(username string) (proxyName, runID string, err error)
+	selectFrpcFn func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error)
 	connTracker  *RelayConnTracker
 }
 
 func NewSOCKS5Handler(
 	listener net.Listener,
 	authPassword string,
-	selectFrpcFn func(username string, dstAddr string, dstPort uint16) (net.Conn, error),
-	getMetaFn func(username string) (proxyName, runID string, err error),
+	selectFrpcFn func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error),
 	connTracker *RelayConnTracker,
 ) *SOCKS5Handler {
 	return &SOCKS5Handler{
 		listener:     listener,
 		authPassword: authPassword,
 		selectFrpcFn: selectFrpcFn,
-		getMetaFn:    getMetaFn,
 		connTracker:  connTracker,
 	}
 }
@@ -81,8 +79,8 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 		return
 	}
 
-	// SOCKS5 auth (username = group, password = authPassword)
-	username, err := h.socks5Auth(clientConn)
+	// SOCKS5 auth (username = group[@userID], password = authPassword)
+	group, userID, err := h.socks5Auth(clientConn)
 	if err != nil {
 		xl.Debugf("socks5 auth error: %v", err)
 		return
@@ -96,27 +94,19 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 	}
 
 	// Select frpc and get work connection with target address
-	workConn, err := h.selectFrpcFn(username, dstAddr, dstPort)
+	workConn, proxyName, runID, err := h.selectFrpcFn(group, userID, dstAddr, dstPort)
 	if err != nil {
-		xl.Warnf("select frpc for group [%s] error: %v", username, err)
+		xl.Warnf("select frpc for group [%s] error: %v", group, err)
 		h.sendSOCKS5Reply(clientConn, 0x01) // general SOCKS server failure
 		return
 	}
 	defer workConn.Close()
 
-	// Get connection metadata
-	proxyName, runID, err := h.getMetaFn(username)
-	if err != nil {
-		xl.Warnf("get conn meta for group [%s] error: %v", username, err)
-		h.sendSOCKS5Reply(clientConn, 0x01)
-		return
-	}
-
 	// Register connection in tracker
 	connID := h.connTracker.Track(RelayConnInfo{
 		SourceIP:  clientConn.RemoteAddr().String(),
 		Protocol:  "socks5",
-		Group:     username,
+		Group:     group,
 		DstAddr:   dstAddr,
 		DstPort:   dstPort,
 		ProxyName: proxyName,
@@ -140,6 +130,20 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 
 	// Bridge traffic
 	_, _, _ = libio.Join(clientConn, workConn)
+}
+
+// parseGroupUserID splits a SOCKS5 username into group and userID.
+// Format: "group" (no userID) or "group@userID".
+func parseGroupUserID(username string) (group, userID string, err error) {
+	parts := strings.SplitN(username, "@", 2)
+	group = parts[0]
+	if group == "" {
+		return "", "", fmt.Errorf("empty group in username [%s]", username)
+	}
+	if len(parts) == 2 {
+		userID = parts[1]
+	}
+	return group, userID, nil
 }
 
 // socks5Handshake performs the initial SOCKS5 greeting.
@@ -178,41 +182,47 @@ func (h *SOCKS5Handler) socks5Handshake(conn net.Conn) error {
 }
 
 // socks5Auth performs SOCKS5 username/password authentication.
-// Returns the username (which equals the group name).
-func (h *SOCKS5Handler) socks5Auth(conn net.Conn) (string, error) {
+// Username format: "group" or "group@userID".
+// Returns the group and userID separately.
+func (h *SOCKS5Handler) socks5Auth(conn net.Conn) (group, userID string, err error) {
 	buf := make([]byte, 2)
 	if _, err := io.ReadFull(conn, buf); err != nil {
-		return "", fmt.Errorf("read auth version: %w", err)
+		return "", "", fmt.Errorf("read auth version: %w", err)
 	}
 	// buf[0] = sub-negotiation version (0x01)
 	ulen := int(buf[1])
 	username := make([]byte, ulen)
 	if _, err := io.ReadFull(conn, username); err != nil {
-		return "", fmt.Errorf("read username: %w", err)
+		return "", "", fmt.Errorf("read username: %w", err)
 	}
 
 	buf2 := make([]byte, 1)
 	if _, err := io.ReadFull(conn, buf2); err != nil {
-		return "", fmt.Errorf("read password length: %w", err)
+		return "", "", fmt.Errorf("read password length: %w", err)
 	}
 	plen := int(buf2[0])
 	password := make([]byte, plen)
 	if _, err := io.ReadFull(conn, password); err != nil {
-		return "", fmt.Errorf("read password: %w", err)
+		return "", "", fmt.Errorf("read password: %w", err)
 	}
 
 	if subtle.ConstantTimeCompare(password, []byte(h.authPassword)) != 1 {
 		conn.Write([]byte{0x01, 0x01}) // auth failure
-		return "", fmt.Errorf("auth failed for user [%s]", string(username))
+		return "", "", fmt.Errorf("auth failed for user [%s]", string(username))
 	}
 
 	if len(username) == 0 {
 		conn.Write([]byte{0x01, 0x01}) // auth failure
-		return "", fmt.Errorf("empty username")
+		return "", "", fmt.Errorf("empty username")
 	}
 
 	conn.Write([]byte{0x01, 0x00}) // auth success
-	return string(username), nil
+
+	group, userID, err = parseGroupUserID(string(username))
+	if err != nil {
+		return "", "", err
+	}
+	return group, userID, nil
 }
 
 // socks5ConnectRequest reads the SOCKS5 connect request and returns target address.

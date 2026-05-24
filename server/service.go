@@ -319,7 +319,7 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		if cfg.Transport.ProxyProtocol {
 			l = &proxyproto.Listener{Listener: l}
 		}
-		svr.socks5Handler = socks5proxy.NewSOCKS5Handler(l, cfg.Socks5ProxyAuthPassword, svr.makeSelectFrpcFn(), svr.makeGetConnMetaFn(), svr.connTracker)
+		svr.socks5Handler = socks5proxy.NewSOCKS5Handler(l, cfg.Socks5ProxyAuthPassword, svr.makeSelectFrpcFn(), svr.connTracker)
 		log.Infof("socks5 proxy listen on %s", address)
 	}
 
@@ -333,7 +333,7 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		if cfg.Transport.ProxyProtocol {
 			l = &proxyproto.Listener{Listener: l}
 		}
-		svr.httpConnectHandler = socks5proxy.NewHTTPConnectHandler(l, cfg.HTTPConnectProxyAuthPassword, svr.makeSelectFrpcFn(), svr.makeGetConnMetaFn(), svr.connTracker)
+		svr.httpConnectHandler = socks5proxy.NewHTTPConnectHandler(l, cfg.HTTPConnectProxyAuthPassword, svr.makeSelectFrpcFn(), svr.connTracker)
 		log.Infof("http connect proxy listen on %s", address)
 	}
 
@@ -919,15 +919,15 @@ func (svr *Service) RegisterVisitorConn(visitorConn net.Conn, newMsg *msg.NewVis
 		newMsg.UseEncryption, newMsg.UseCompression, visitorUser)
 }
 
-func (svr *Service) makeSelectFrpcFn() func(username string, dstAddr string, dstPort uint16) (net.Conn, error) {
-	return func(username string, dstAddr string, dstPort uint16) (net.Conn, error) {
-		ctl, proxyName, err := svr.sessionManager.SelectFrpc(username)
+func (svr *Service) makeSelectFrpcFn() func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error) {
+	return func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error) {
+		ctl, proxyName, err := svr.sessionManager.SelectFrpc(group, userID)
 		if err != nil {
-			return nil, err
+			return nil, "", "", err
 		}
 		workConn, err := ctl.GetWorkConn()
 		if err != nil {
-			return nil, fmt.Errorf("get work connection error: %w", err)
+			return nil, "", "", fmt.Errorf("get work connection error: %w", err)
 		}
 		conn, err := workConn.Start(&msg.StartWorkConn{
 			ProxyName: proxyName,
@@ -936,19 +936,8 @@ func (svr *Service) makeSelectFrpcFn() func(username string, dstAddr string, dst
 		})
 		if err != nil {
 			workConn.Close()
-			return nil, fmt.Errorf("start work connection error: %w", err)
+			return nil, "", "", fmt.Errorf("start work connection error: %w", err)
 		}
-		return conn, nil
-	}
-}
-
-func (svr *Service) makeGetConnMetaFn() func(username string) (proxyName, runID string, err error) {
-	return func(username string) (proxyName, runID string, err error) {
-		ctl, proxyName, err := svr.sessionManager.SelectFrpc(username)
-		if err != nil {
-			return "", "", err
-		}
-		runID = ctl.runID
-		return proxyName, runID, nil
+		return conn, proxyName, ctl.runID, nil
 	}
 }

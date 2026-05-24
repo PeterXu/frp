@@ -32,23 +32,20 @@ import (
 type HTTPConnectHandler struct {
 	listener     net.Listener
 	authPassword string
-	selectFrpcFn func(username string, dstAddr string, dstPort uint16) (net.Conn, error)
-	getMetaFn    func(username string) (proxyName, runID string, err error)
+	selectFrpcFn func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error)
 	connTracker  *RelayConnTracker
 }
 
 func NewHTTPConnectHandler(
 	listener net.Listener,
 	authPassword string,
-	selectFrpcFn func(username string, dstAddr string, dstPort uint16) (net.Conn, error),
-	getMetaFn func(username string) (proxyName, runID string, err error),
+	selectFrpcFn func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error),
 	connTracker *RelayConnTracker,
 ) *HTTPConnectHandler {
 	return &HTTPConnectHandler{
 		listener:     listener,
 		authPassword: authPassword,
 		selectFrpcFn: selectFrpcFn,
-		getMetaFn:    getMetaFn,
 		connTracker:  connTracker,
 	}
 }
@@ -93,8 +90,8 @@ func (h *HTTPConnectHandler) handleConn(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	// Extract username from Proxy-Authorization header
-	username, err := h.extractUsername(req)
+	// Extract group and userID from Proxy-Authorization header
+	group, userID, err := h.extractAuth(req)
 	if err != nil {
 		resp := &http.Response{
 			StatusCode: http.StatusProxyAuthRequired,
@@ -120,27 +117,19 @@ func (h *HTTPConnectHandler) handleConn(ctx context.Context, conn net.Conn) {
 	port := uint16(parsedPort)
 
 	// Select frpc and get work connection
-	workConn, err := h.selectFrpcFn(username, host, port)
+	workConn, proxyName, runID, err := h.selectFrpcFn(group, userID, host, port)
 	if err != nil {
-		xl.Warnf("select frpc for group [%s] error: %v", username, err)
+		xl.Warnf("select frpc for group [%s] error: %v", group, err)
 		http.Error(newRespWriter(conn), "bad gateway", http.StatusBadGateway)
 		return
 	}
 	defer workConn.Close()
 
-	// Get connection metadata
-	proxyName, runID, err := h.getMetaFn(username)
-	if err != nil {
-		xl.Warnf("get conn meta for group [%s] error: %v", username, err)
-		http.Error(newRespWriter(conn), "bad gateway", http.StatusBadGateway)
-		return
-	}
-
 	// Register connection in tracker
 	connID := h.connTracker.Track(RelayConnInfo{
 		SourceIP:  conn.RemoteAddr().String(),
 		Protocol:  "http_connect",
-		Group:     username,
+		Group:     group,
 		DstAddr:   host,
 		DstPort:   port,
 		ProxyName: proxyName,
@@ -186,36 +175,42 @@ func (h *HTTPConnectHandler) handleConn(ctx context.Context, conn net.Conn) {
 	_, _, _ = libio.Join(clientConn, workConn)
 }
 
-func (h *HTTPConnectHandler) extractUsername(req *http.Request) (string, error) {
+// extractAuth extracts group and userID from HTTP Basic Auth.
+// Username format: "group" or "group@userID".
+func (h *HTTPConnectHandler) extractAuth(req *http.Request) (group, userID string, err error) {
 	authHeader := req.Header.Get("Proxy-Authorization")
 	if authHeader == "" {
-		return "", fmt.Errorf("no proxy authorization header")
+		return "", "", fmt.Errorf("no proxy authorization header")
 	}
 
 	const prefix = "Basic "
 	if !strings.HasPrefix(authHeader, prefix) {
-		return "", fmt.Errorf("invalid auth scheme")
+		return "", "", fmt.Errorf("invalid auth scheme")
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(authHeader[len(prefix):])
 	if err != nil {
-		return "", fmt.Errorf("decode auth error: %w", err)
+		return "", "", fmt.Errorf("decode auth error: %w", err)
 	}
 
 	parts := strings.SplitN(string(decoded), ":", 2)
 	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid auth format")
+		return "", "", fmt.Errorf("invalid auth format")
 	}
 
 	if parts[0] == "" {
-		return "", fmt.Errorf("empty username")
+		return "", "", fmt.Errorf("empty username")
 	}
 
 	if subtle.ConstantTimeCompare([]byte(parts[1]), []byte(h.authPassword)) != 1 {
-		return "", fmt.Errorf("auth failed")
+		return "", "", fmt.Errorf("auth failed")
 	}
 
-	return parts[0], nil
+	group, userID, err = parseGroupUserID(parts[0])
+	if err != nil {
+		return "", "", err
+	}
+	return group, userID, nil
 }
 
 // respWriter wraps a net.Conn to implement http.ResponseWriter for error responses.

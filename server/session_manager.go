@@ -1,4 +1,4 @@
-// Copyright 2026 The frP Authors
+// Copyright 2026 The frp Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import (
 
 // SessionManager manages username→frpc session binding with round-robin selection.
 type SessionManager struct {
-	sessions      map[string]string         // username -> runID binding
+	sessions      map[string]string         // "group@userID" -> runID binding
 	groupIndex    map[string]*atomic.Uint64 // group -> round-robin counter
 	groupRegistry *Socks5RelayGroupRegistry
 	ctlManager    *ControlManager
@@ -32,33 +32,39 @@ func NewSessionManager(groupRegistry *Socks5RelayGroupRegistry, ctlManager *Cont
 	}
 }
 
-// SelectFrpc selects a frpc Control for the given username (= group name).
-// Uses session affinity: if the username was previously bound to a live frpc, return it.
-// Otherwise, select a new frpc via round-robin from the group.
+// SelectFrpc selects a frpc Control for the given group and optional userID.
+// When userID is present, uses session affinity keyed by "group@userID":
+//   - if previously bound to a live frpc, return it (sticky session)
+//   - otherwise, select a new frpc via round-robin and store the binding
+// When userID is empty, always round-robin without session binding.
 // Returns the Control and the proxyName needed for work connection dispatch.
-func (sm *SessionManager) SelectFrpc(username string) (*Control, string, error) {
-	sm.mu.RLock()
-	boundRunID, hasBinding := sm.sessions[username]
-	sm.mu.RUnlock()
+func (sm *SessionManager) SelectFrpc(group, userID string) (*Control, string, error) {
+	// Session affinity: only when userID is present
+	if userID != "" {
+		sessionKey := group + "@" + userID
+		sm.mu.RLock()
+		boundRunID, hasBinding := sm.sessions[sessionKey]
+		sm.mu.RUnlock()
 
-	if hasBinding {
-		ctl, ok := sm.ctlManager.GetByID(boundRunID)
-		if ok {
-			proxyName := sm.groupRegistry.GetProxyName(username, boundRunID)
-			return ctl, proxyName, nil
+		if hasBinding {
+			ctl, ok := sm.ctlManager.GetByID(boundRunID)
+			if ok {
+				proxyName := sm.groupRegistry.GetProxyName(group, boundRunID)
+				return ctl, proxyName, nil
+			}
 		}
 	}
 
-	members := sm.groupRegistry.GetGroupMembers(username)
+	members := sm.groupRegistry.GetGroupMembers(group)
 	if len(members) == 0 {
-		return nil, "", fmt.Errorf("no available frpc in group [%s]", username)
+		return nil, "", fmt.Errorf("no available frpc in group [%s]", group)
 	}
 
 	sm.mu.Lock()
-	counter, ok := sm.groupIndex[username]
+	counter, ok := sm.groupIndex[group]
 	if !ok {
 		counter = &atomic.Uint64{}
-		sm.groupIndex[username] = counter
+		sm.groupIndex[group] = counter
 	}
 	sm.mu.Unlock()
 
@@ -70,11 +76,17 @@ func (sm *SessionManager) SelectFrpc(username string) (*Control, string, error) 
 		return nil, "", fmt.Errorf("selected frpc [%s] is not available", runID)
 	}
 
-	sm.mu.Lock()
-	sm.sessions[username] = runID
-	sm.mu.Unlock()
+	// Only bind session when userID is present
+	if userID != "" {
+		sm.mu.Lock()
+		sm.sessions[group+"@"+userID] = runID
+		sm.mu.Unlock()
+	}
 
-	proxyName := sm.groupRegistry.GetProxyName(username, runID)
+	proxyName := sm.groupRegistry.GetProxyName(group, runID)
+	if proxyName == "" {
+		return nil, "", fmt.Errorf("no proxy registered for group [%s] runID [%s]", group, runID)
+	}
 	return ctl, proxyName, nil
 }
 
