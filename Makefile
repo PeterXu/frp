@@ -5,6 +5,9 @@ NOWEB_TAG = $(shell [ ! -d web/frps/dist ] || [ ! -d web/frpc/dist ] && echo ',n
 FRP_COMPAT_BASELINE_COUNT ?= 8
 FRP_COMPAT_FLOOR_VERSION ?= 0.61.0
 
+OS ?= $(shell go env GOOS)
+ARCH ?= $(shell go env GOARCH)
+
 DATE_PREFIX := $(shell date +%y%m%d)
 GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo 'dev')
 VERSION ?= $(DATE_PREFIX).$(GIT_VERSION)
