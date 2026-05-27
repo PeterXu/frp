@@ -130,6 +130,7 @@ type Service struct {
 	groupRegistry  *Socks5RelayGroupRegistry
 	sessionManager *SessionManager
 	connTracker    *socks5proxy.RelayConnTracker
+	stateStore     *StateStore
 
 	// Auth runtime and encryption materials
 	auth *auth.ServerAuth
@@ -233,11 +234,23 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 	// Initialize SOCKS5 relay components
 	svr.groupRegistry = NewSocks5RelayGroupRegistry()
 	svr.sessionManager = NewSessionManager(svr.groupRegistry, svr.ctlManager)
-	// 0 = disabled (no retention of closed connections)
+	svr.groupRegistry.OnClientDisabled = svr.sessionManager.RemoveSession
+	// Default to 10 minutes retention if not specified (0 = disabled)
 	retentionDuration := time.Duration(cfg.ConnRetentionDuration) * time.Second
 	svr.connTracker = socks5proxy.NewRelayConnTracker(retentionDuration)
 	svr.rc.Socks5RelayGroupRegistry = svr.groupRegistry
 	svr.rc.Socks5SessionManager = svr.sessionManager
+
+	// Initialize StateStore if stateFile is configured
+	if cfg.StateFile != "" {
+		svr.stateStore = NewStateStore()
+		if err := svr.stateStore.Init(cfg.StateFile); err != nil {
+			return nil, fmt.Errorf("failed to initialize state store: %v", err)
+		}
+		if err := svr.groupRegistry.SetStateStore(svr.stateStore); err != nil {
+			return nil, fmt.Errorf("failed to load state store: %v", err)
+		}
+	}
 
 	// Init 404 not found page
 	vhost.NotFoundPagePath = cfg.Custom404Page
@@ -498,6 +511,10 @@ func (svr *Service) Close() error {
 	// Close connection tracker to stop cleanup goroutine
 	if svr.connTracker != nil {
 		svr.connTracker.Close()
+	}
+	// Close StateStore to release bbolt database
+	if svr.stateStore != nil {
+		svr.stateStore.Close()
 	}
 	svr.muxer.Close()
 	svr.ctlManager.Close()

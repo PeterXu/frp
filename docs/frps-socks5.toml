@@ -89,6 +89,9 @@ httpConnectProxyAuthPassword = "pass"
 # Retention time for closed connections display in dashboard (default: 600 = 10 minutes)
 # connRetentionDuration = 600
 
+# Persistent state database for SOCKS5 client disable/enable feature.
+stateFile = "/var/lib/frp/state.db"
+
 # Configure the web server to enable the dashboard for frps.
 # dashboard is available only if webServer.port is set.
 webServer.addr = "0.0.0.0"

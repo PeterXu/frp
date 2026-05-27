@@ -128,6 +128,7 @@ func Convert_ServerCommonConf_To_v1(conf *ServerCommonConf) *v1.ServerConfig {
 	}
 
 	out.EnablePrometheus = conf.EnablePrometheus
+	out.StateFile = conf.StateFile
 
 	out.Log.To = conf.LogFile
 	out.Log.Level = conf.LogLevel

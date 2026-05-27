@@ -10,16 +10,28 @@ package server
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"sync"
 )
 
 // Socks5RelayGroupRegistry tracks which frpc instances (by runID) belong to which groups.
+// It also holds in-memory disabled flags for groups and clients, persisted via StateStore.
 type Socks5RelayGroupRegistry struct {
 	groups      map[string]map[string]struct{} // group -> set of runIDs
 	runIDGroups map[string]map[string]struct{} // runID -> set of groups (reverse index)
 	proxyNames  map[groupRunID]string          // (group, runID) -> proxyName
 	mu          sync.RWMutex
+
+	// In-memory disabled flags (source of truth for reads).
+	disabledGroups  map[string]bool // group -> disabled
+	disabledClients map[string]bool // runID -> disabled
+
+	// stateStore for persistence only (nil if stateFile not configured).
+	stateStore *StateStore
+
+	// OnClientDisabled is called after a client is successfully disabled.
+	OnClientDisabled func(runID string)
 }
 
 type groupRunID struct {
@@ -29,10 +41,33 @@ type groupRunID struct {
 
 func NewSocks5RelayGroupRegistry() *Socks5RelayGroupRegistry {
 	return &Socks5RelayGroupRegistry{
-		groups:      make(map[string]map[string]struct{}),
-		runIDGroups: make(map[string]map[string]struct{}),
-		proxyNames:  make(map[groupRunID]string),
+		groups:          make(map[string]map[string]struct{}),
+		runIDGroups:     make(map[string]map[string]struct{}),
+		proxyNames:      make(map[groupRunID]string),
+		disabledGroups:  make(map[string]bool),
+		disabledClients: make(map[string]bool),
 	}
+}
+
+// SetStateStore sets the StateStore and loads persisted disabled state into memory.
+func (r *Socks5RelayGroupRegistry) SetStateStore(store *StateStore) error {
+	// Load from bbolt first, then assign under lock to avoid TOCTOU.
+	groups, err := store.LoadDisabledGroups()
+	if err != nil {
+		return fmt.Errorf("load disabled groups: %w", err)
+	}
+
+	clients, err := store.LoadDisabledClients()
+	if err != nil {
+		return fmt.Errorf("load disabled clients: %w", err)
+	}
+
+	r.mu.Lock()
+	r.stateStore = store
+	r.disabledGroups = groups
+	r.disabledClients = clients
+	r.mu.Unlock()
+	return nil
 }
 
 func (r *Socks5RelayGroupRegistry) Register(group, runID, proxyName string) {
@@ -53,22 +88,40 @@ func (r *Socks5RelayGroupRegistry) Register(group, runID, proxyName string) {
 
 func (r *Socks5RelayGroupRegistry) Unregister(runID string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	groups, ok := r.runIDGroups[runID]
 	if !ok {
+		r.mu.Unlock()
 		return
 	}
+
+	var emptyGroups []string
 	for group := range groups {
 		if members, ok := r.groups[group]; ok {
 			delete(members, runID)
 			if len(members) == 0 {
 				delete(r.groups, group)
+				delete(r.disabledGroups, group)
+				emptyGroups = append(emptyGroups, group)
 			}
 		}
 		delete(r.proxyNames, groupRunID{group, runID})
 	}
 	delete(r.runIDGroups, runID)
+	wasDisabled := r.disabledClients[runID]
+	delete(r.disabledClients, runID)
+	store := r.stateStore
+	r.mu.Unlock()
+
+	// Persist cleanup to bbolt outside the lock.
+	if store != nil && wasDisabled {
+		_ = store.RemoveDisabledClient(runID)
+	}
+	for _, g := range emptyGroups {
+		if store != nil {
+			_ = store.RemoveDisabledGroup(g)
+		}
+	}
 }
 
 func (r *Socks5RelayGroupRegistry) GetProxyName(group, runID string) string {
@@ -91,6 +144,112 @@ func (r *Socks5RelayGroupRegistry) GetGroupMembers(group string) []string {
 	}
 	slices.Sort(result)
 	return result
+}
+
+// IsGroupDisabled returns true if the group is disabled (in-memory check).
+func (r *Socks5RelayGroupRegistry) IsGroupDisabled(group string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.disabledGroups[group]
+}
+
+// IsClientDisabled returns true if the client (runID) is disabled (in-memory check).
+func (r *Socks5RelayGroupRegistry) IsClientDisabled(runID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.disabledClients[runID]
+}
+
+// DisableGroup disables a group: sets in-memory flag and persists if stateStore is configured.
+func (r *Socks5RelayGroupRegistry) DisableGroup(group string) error {
+	r.mu.Lock()
+	if _, ok := r.groups[group]; !ok {
+		r.mu.Unlock()
+		return fmt.Errorf("group [%s] not found", group)
+	}
+	r.disabledGroups[group] = true
+	store := r.stateStore
+	r.mu.Unlock()
+
+	if store != nil {
+		if err := store.PersistDisabledGroup(group); err != nil {
+			r.mu.Lock()
+			delete(r.disabledGroups, group)
+			r.mu.Unlock()
+			return err
+		}
+	}
+	return nil
+}
+
+// EnableGroup enables a group: clears in-memory flag and removes from state.db if configured.
+func (r *Socks5RelayGroupRegistry) EnableGroup(group string) error {
+	r.mu.Lock()
+	if _, ok := r.groups[group]; !ok {
+		r.mu.Unlock()
+		return fmt.Errorf("group [%s] not found", group)
+	}
+	delete(r.disabledGroups, group)
+	store := r.stateStore
+	r.mu.Unlock()
+
+	if store != nil {
+		if err := store.RemoveDisabledGroup(group); err != nil {
+			r.mu.Lock()
+			r.disabledGroups[group] = true
+			r.mu.Unlock()
+			return err
+		}
+	}
+	return nil
+}
+
+// DisableClient disables a client: sets in-memory flag and persists if stateStore is configured.
+func (r *Socks5RelayGroupRegistry) DisableClient(runID string) error {
+	r.mu.Lock()
+	if _, ok := r.runIDGroups[runID]; !ok {
+		r.mu.Unlock()
+		return fmt.Errorf("client [%s] not found", runID)
+	}
+	r.disabledClients[runID] = true
+	store := r.stateStore
+	r.mu.Unlock()
+
+	if store != nil {
+		if err := store.PersistDisabledClient(runID); err != nil {
+			r.mu.Lock()
+			delete(r.disabledClients, runID)
+			r.mu.Unlock()
+			return err
+		}
+	}
+
+	if r.OnClientDisabled != nil {
+		r.OnClientDisabled(runID)
+	}
+	return nil
+}
+
+// EnableClient enables a client: clears in-memory flag and removes from state.db if configured.
+func (r *Socks5RelayGroupRegistry) EnableClient(runID string) error {
+	r.mu.Lock()
+	if _, ok := r.runIDGroups[runID]; !ok {
+		r.mu.Unlock()
+		return fmt.Errorf("client [%s] not found", runID)
+	}
+	delete(r.disabledClients, runID)
+	store := r.stateStore
+	r.mu.Unlock()
+
+	if store != nil {
+		if err := store.RemoveDisabledClient(runID); err != nil {
+			r.mu.Lock()
+			r.disabledClients[runID] = true
+			r.mu.Unlock()
+			return err
+		}
+	}
+	return nil
 }
 
 type GroupDetail struct {

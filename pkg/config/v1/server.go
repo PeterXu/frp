@@ -74,6 +74,9 @@ type ServerConfig struct {
 	// for display in the dashboard. Default is 10 minutes. Set to 0 to disable keeping
 	// closed connections.
 	ConnRetentionDuration int64 `json:"connRetentionDuration,omitempty"`
+	// StateFile specifies the path to the bbolt database file for persistent state storage.
+	// Default is empty, which means no persistent state storage.
+	StateFile string `json:"stateFile,omitempty"`
 	// SubDomainHost specifies the domain that will be attached to sub-domains
 	// requested by the client when using Vhost proxying. For example, if this
 	// value is set to "frps.com" and the client requested the subdomain
