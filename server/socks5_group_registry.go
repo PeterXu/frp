@@ -20,6 +20,9 @@ type Socks5RelayGroupRegistry struct {
 	runIDGroups map[string]map[string]struct{} // runID -> set of groups (reverse index)
 	proxyNames  map[groupRunID]string          // (group, runID) -> proxyName
 	mu          sync.RWMutex
+
+	// stateStore for checking disabled state
+	stateStore *StateStore
 }
 
 type groupRunID struct {
@@ -27,12 +30,20 @@ type groupRunID struct {
 	runID string
 }
 
-func NewSocks5RelayGroupRegistry() *Socks5RelayGroupRegistry {
+func NewSocks5RelayGroupRegistry(stateStore *StateStore) *Socks5RelayGroupRegistry {
 	return &Socks5RelayGroupRegistry{
 		groups:      make(map[string]map[string]struct{}),
 		runIDGroups: make(map[string]map[string]struct{}),
 		proxyNames:  make(map[groupRunID]string),
+		stateStore:  stateStore,
 	}
+}
+
+// SetStateStore sets the StateStore reference. Used for late binding.
+func (r *Socks5RelayGroupRegistry) SetStateStore(store *StateStore) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.stateStore = store
 }
 
 func (r *Socks5RelayGroupRegistry) Register(group, runID, proxyName string) {

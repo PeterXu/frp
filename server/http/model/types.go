@@ -105,14 +105,25 @@ type Socks5RelayOutConf struct {
 }
 
 type Socks5RelayGroupInfo struct {
-	Name    string                   `json:"name"`
-	Members []Socks5RelayGroupMember `json:"members"`
+	Name     string                   `json:"name"`
+	Members  []Socks5RelayGroupMember `json:"members"`
+	Disabled bool                     `json:"disabled"` // group disabled status
 }
 
 type Socks5RelayGroupMember struct {
 	RunID     string `json:"runID"`
 	ProxyName string `json:"proxyName"`
 	Online    bool   `json:"online"`
+	Key       string `json:"key"`      // client key for disable operations
+	Disabled  bool   `json:"disabled"` // disabled status
+}
+
+// DisableStateResponse represents the response for disable/enable operations.
+type DisableStateResponse struct {
+	Success  bool   `json:"success"`
+	Key      string `json:"key,omitempty"`
+	Group    string `json:"group,omitempty"`
+	Disabled bool   `json:"disabled"`
 }
 
 type Socks5RelaySessionInfo struct {

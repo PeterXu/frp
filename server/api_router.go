@@ -61,6 +61,11 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	subRouter.HandleFunc("/api/socks5relay/events", svr.apiSocks5RelayEvents).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/retention", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayRetention)).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/retention", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelaySetRetention)).Methods("PUT")
+	// socks5relay disable/enable routes
+	subRouter.HandleFunc("/api/socks5relay/group/{group}/disable", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayGroupDisable)).Methods("PUT")
+	subRouter.HandleFunc("/api/socks5relay/group/{group}/enable", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayGroupEnable)).Methods("PUT")
+	subRouter.HandleFunc("/api/socks5relay/client/{key}/disable", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayClientDisable)).Methods("PUT")
+	subRouter.HandleFunc("/api/socks5relay/client/{key}/enable", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayClientEnable)).Methods("PUT")
 
 	// view
 	subRouter.Handle("/favicon.ico", http.FileServer(helper.AssetsFS)).Methods("GET")
@@ -85,17 +90,22 @@ func (svr *Service) apiSocks5RelayGroups(ctx *httppkg.Context) (any, error) {
 
 	resp := make([]model.Socks5RelayGroupInfo, 0, len(groups))
 	for _, group := range groups {
+		groupDisabled := svr.stateStore != nil && svr.stateStore.IsGroupDisabled(group.Name)
 		members := make([]model.Socks5RelayGroupMember, 0, len(group.Members))
 		for _, member := range group.Members {
+			memberDisabled := svr.stateStore != nil && svr.stateStore.IsClientDisabled(member.RunID)
 			members = append(members, model.Socks5RelayGroupMember{
 				RunID:     member.RunID,
 				ProxyName: member.ProxyName,
 				Online:    member.Online,
+				Key:       member.RunID,
+				Disabled:  memberDisabled,
 			})
 		}
 		resp = append(resp, model.Socks5RelayGroupInfo{
-			Name:    group.Name,
-			Members: members,
+			Name:     group.Name,
+			Members:  members,
+			Disabled: groupDisabled,
 		})
 	}
 	return resp, nil
@@ -226,4 +236,92 @@ func (svr *Service) apiSocks5RelayEvents(w http.ResponseWriter, r *http.Request)
 			flusher.Flush()
 		}
 	}
+}
+
+// apiSocks5RelayGroupDisable disables a SOCKS5 relay group.
+func (svr *Service) apiSocks5RelayGroupDisable(ctx *httppkg.Context) (any, error) {
+	group := ctx.Param("group")
+	if group == "" {
+		return nil, fmt.Errorf("missing group name")
+	}
+
+	if svr.stateStore == nil {
+		return nil, fmt.Errorf("state store unavailable")
+	}
+
+	if err := svr.stateStore.DisableGroup(group); err != nil {
+		return nil, err
+	}
+
+	return model.DisableStateResponse{
+		Success:  true,
+		Group:    group,
+		Disabled: true,
+	}, nil
+}
+
+// apiSocks5RelayGroupEnable enables a SOCKS5 relay group.
+func (svr *Service) apiSocks5RelayGroupEnable(ctx *httppkg.Context) (any, error) {
+	group := ctx.Param("group")
+	if group == "" {
+		return nil, fmt.Errorf("missing group name")
+	}
+
+	if svr.stateStore == nil {
+		return nil, fmt.Errorf("state store unavailable")
+	}
+
+	if err := svr.stateStore.EnableGroup(group); err != nil {
+		return nil, err
+	}
+
+	return model.DisableStateResponse{
+		Success:  true,
+		Group:    group,
+		Disabled: false,
+	}, nil
+}
+
+// apiSocks5RelayClientDisable disables a SOCKS5 relay client.
+func (svr *Service) apiSocks5RelayClientDisable(ctx *httppkg.Context) (any, error) {
+	key := ctx.Param("key")
+	if key == "" {
+		return nil, fmt.Errorf("missing client key")
+	}
+
+	if svr.stateStore == nil {
+		return nil, fmt.Errorf("state store unavailable")
+	}
+
+	if err := svr.stateStore.DisableClient(key); err != nil {
+		return nil, err
+	}
+
+	return model.DisableStateResponse{
+		Success:  true,
+		Key:      key,
+		Disabled: true,
+	}, nil
+}
+
+// apiSocks5RelayClientEnable enables a SOCKS5 relay client.
+func (svr *Service) apiSocks5RelayClientEnable(ctx *httppkg.Context) (any, error) {
+	key := ctx.Param("key")
+	if key == "" {
+		return nil, fmt.Errorf("missing client key")
+	}
+
+	if svr.stateStore == nil {
+		return nil, fmt.Errorf("state store unavailable")
+	}
+
+	if err := svr.stateStore.EnableClient(key); err != nil {
+		return nil, err
+	}
+
+	return model.DisableStateResponse{
+		Success:  true,
+		Key:      key,
+		Disabled: false,
+	}, nil
 }

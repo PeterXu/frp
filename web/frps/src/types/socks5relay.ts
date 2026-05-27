@@ -2,11 +2,14 @@ export interface Socks5RelayGroupMember {
   runID: string
   proxyName: string
   online: boolean
+  disabled: boolean
+  key: string
 }
 
 export interface Socks5RelayGroupInfo {
   name: string
   members: Socks5RelayGroupMember[]
+  disabled: boolean
 }
 
 export interface Socks5RelaySessionInfo {

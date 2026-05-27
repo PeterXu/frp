@@ -66,6 +66,8 @@ type ResourceController struct {
 	Socks5RelayGroupRegistry Socks5GroupRegistry
 	// Socks5 relay session manager (interface satisfied by server.SessionManager)
 	Socks5SessionManager Socks5SessionManager
+	// StateStore for persistent state (interface satisfied by server.StateStore)
+	StateStore Socks5StateStore
 }
 
 // Socks5GroupRegistry manages socks5_relay group → frpc runID mappings.
@@ -81,6 +83,16 @@ type Socks5GroupRegistry interface {
 // from Service (which accesses SessionManager directly since they're in the same package).
 type Socks5SessionManager interface {
 	RemoveSession(runID string)
+}
+
+// Socks5StateStore provides persistent storage for socks5 state.
+type Socks5StateStore interface {
+	DisableGroup(group string) error
+	EnableGroup(group string) error
+	IsGroupDisabled(group string) bool
+	DisableClient(key string) error
+	EnableClient(key string) error
+	IsClientDisabled(key string) bool
 }
 
 func (rc *ResourceController) Close() error {

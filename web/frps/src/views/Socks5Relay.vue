@@ -57,7 +57,15 @@
           >
             <template #header>
               <div class="group-header">
-                <span class="group-name">{{ group.name }}</span>
+                <div class="group-header-left">
+                  <span class="group-name">{{ group.name }}</span>
+                  <el-switch
+                    v-model="group.enabled"
+                    :loading="group.loading"
+                    size="small"
+                    @change="handleGroupToggle(group)"
+                  />
+                </div>
                 <el-tag size="small" type="info">
                   {{ group.members.length }} member{{ group.members.length !== 1 ? 's' : '' }}
                   ({{ onlineCount(group.members) }} online)
@@ -67,6 +75,16 @@
             <el-table :data="group.members" class="members-table">
               <el-table-column prop="proxyName" label="Proxy Name" />
               <el-table-column prop="runID" label="Run ID" />
+              <el-table-column label="Enabled" width="80">
+                <template #default="{ row }">
+                  <el-switch
+                    v-model="row.enabled"
+                    :loading="row.loading"
+                    size="small"
+                    @change="handleClientToggle(group, row)"
+                  />
+                </template>
+              </el-table-column>
               <el-table-column label="Online" width="80">
                 <template #default="{ row }">
                   <el-tag :type="row.online ? 'success' : 'danger'" size="small">
@@ -106,19 +124,39 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import ActionButton from '@shared/components/ActionButton.vue'
 import { getServerInfo } from '../api/server'
-import { getSocks5RelayGroups, getSocks5RelaySessions } from '../api/socks5relay'
-import type { Socks5RelayGroupInfo, Socks5RelaySessionInfo } from '../types/socks5relay'
+import {
+  getSocks5RelayGroups,
+  getSocks5RelaySessions,
+  enableSocks5RelayGroup,
+  disableSocks5RelayGroup,
+  enableSocks5RelayClient,
+  disableSocks5RelayClient,
+} from '../api/socks5relay'
+import type { Socks5RelayGroupMember, Socks5RelaySessionInfo } from '../types/socks5relay'
+
+interface GroupWithState {
+  name: string
+  members: MemberWithState[]
+  disabled: boolean
+  enabled: boolean
+  loading: boolean
+}
+
+interface MemberWithState extends Socks5RelayGroupMember {
+  enabled: boolean
+  loading: boolean
+}
 
 const serverInfo = ref({
   socks5ProxyPort: 0,
   httpConnectProxyPort: 0,
 })
-const groups = ref<Socks5RelayGroupInfo[]>([])
+const groups = ref<GroupWithState[]>([])
 const sessions = ref<Socks5RelaySessionInfo[]>([])
 const loadingGroups = ref(false)
 const loadingSessions = ref(false)
 
-const onlineCount = (members: any[]) => {
+const onlineCount = (members: MemberWithState[]) => {
   return members.filter((m) => m.online).length
 }
 
@@ -139,7 +177,17 @@ const fetchServerInfo = async () => {
 const fetchGroups = async () => {
   loadingGroups.value = true
   try {
-    groups.value = await getSocks5RelayGroups()
+    const data = await getSocks5RelayGroups()
+    groups.value = data.map((g) => ({
+      ...g,
+      enabled: !g.disabled,
+      loading: false,
+      members: g.members.map((m) => ({
+        ...m,
+        enabled: !m.disabled,
+        loading: false,
+      })),
+    }))
   } catch (error: any) {
     ElMessage({
       showClose: true,
@@ -148,6 +196,48 @@ const fetchGroups = async () => {
     })
   } finally {
     loadingGroups.value = false
+  }
+}
+
+const handleGroupToggle = async (group: GroupWithState) => {
+  const previousEnabled = group.enabled
+  group.loading = true
+  try {
+    if (group.enabled) {
+      await enableSocks5RelayGroup(group.name)
+    } else {
+      await disableSocks5RelayGroup(group.name)
+    }
+  } catch (error: any) {
+    group.enabled = previousEnabled
+    ElMessage({
+      showClose: true,
+      message: 'Failed to toggle group: ' + error.message,
+      type: 'error',
+    })
+  } finally {
+    group.loading = false
+  }
+}
+
+const handleClientToggle = async (_group: GroupWithState, member: MemberWithState) => {
+  const previousEnabled = member.enabled
+  member.loading = true
+  try {
+    if (member.enabled) {
+      await enableSocks5RelayClient(member.key)
+    } else {
+      await disableSocks5RelayClient(member.key)
+    }
+  } catch (error: any) {
+    member.enabled = previousEnabled
+    ElMessage({
+      showClose: true,
+      message: 'Failed to toggle client: ' + error.message,
+      type: 'error',
+    })
+  } finally {
+    member.loading = false
   }
 }
 
@@ -296,6 +386,12 @@ html.dark .group-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.group-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .group-name {
