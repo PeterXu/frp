@@ -36,6 +36,7 @@ func NewSessionManager(groupRegistry *Socks5RelayGroupRegistry, ctlManager *Cont
 // When userID is present, uses session affinity keyed by "group@userID":
 //   - if previously bound to a live frpc, return it (sticky session)
 //   - otherwise, select a new frpc via round-robin and store the binding
+//
 // When userID is empty, always round-robin without session binding.
 // Returns the Control and the proxyName needed for work connection dispatch.
 func (sm *SessionManager) SelectFrpc(group, userID string) (*Control, string, error) {

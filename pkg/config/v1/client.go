@@ -152,7 +152,9 @@ func (c *ClientTransportConfig) Complete() {
 	c.WireProtocol = util.EmptyOr(c.WireProtocol, "v1")
 	c.DialServerTimeout = util.EmptyOr(c.DialServerTimeout, 10)
 	c.DialServerKeepAlive = util.EmptyOr(c.DialServerKeepAlive, 7200)
-	c.ProxyURL = util.EmptyOr(c.ProxyURL, os.Getenv("http_proxy"))
+	c.ProxyURL = util.FirstNonEmpty(c.ProxyURL,
+		os.Getenv("http_proxy"), os.Getenv("HTTP_PROXY"),
+		os.Getenv("all_proxy"), os.Getenv("ALL_PROXY"))
 	c.PoolCount = util.EmptyOr(c.PoolCount, 1)
 	c.TCPMux = util.EmptyOr(c.TCPMux, lo.ToPtr(true))
 	c.TCPMuxKeepaliveInterval = util.EmptyOr(c.TCPMuxKeepaliveInterval, 30)

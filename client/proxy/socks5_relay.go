@@ -21,6 +21,7 @@ import (
 
 	v1 "github.com/fatedier/frp/pkg/config/v1"
 	"github.com/fatedier/frp/pkg/msg"
+	"github.com/fatedier/frp/pkg/util/util"
 )
 
 func init() {
@@ -64,7 +65,7 @@ func (pxy *Socks5RelayProxy) InWorkConn(conn net.Conn, m *msg.StartWorkConn) {
 	// Acquire token from pool - blocks if channel is full (limit reached)
 	// Requests will wait until a previous request completes and releases its token
 	if pxy.tokenPool != nil {
-		pxy.tokenPool <- struct{}{} // acquire: send blocks if channel full
+		pxy.tokenPool <- struct{}{}        // acquire: send blocks if channel full
 		defer func() { <-pxy.tokenPool }() // release: receive frees a slot
 	}
 
@@ -80,14 +81,9 @@ func (pxy *Socks5RelayProxy) InWorkConn(conn net.Conn, m *msg.StartWorkConn) {
 	var targetConn net.Conn
 	var err error
 
-	proxyURL := pxy.cfg.OutboundProxy
-	if proxyURL == "" {
-		// Fallback: RELAY_PROXY environment variable (dedicated for socks5_relay)
-		proxyURL = os.Getenv("RELAY_PROXY")
-		if proxyURL == "" {
-			proxyURL = os.Getenv("relay_proxy")
-		}
-	}
+	// Fallback: RELAY_PROXY environment variable (dedicated for socks5_relay)
+	proxyURL := util.FirstNonEmpty(pxy.cfg.OutboundProxy,
+		os.Getenv("RELAY_PROXY"), os.Getenv("relay_proxy"))
 
 	if proxyURL != "" {
 		targetConn, err = pxy.dialViaProxyURL(targetAddr, proxyURL)
