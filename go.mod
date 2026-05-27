@@ -20,12 +20,13 @@ require (
 	github.com/rodaine/table v1.2.0
 	github.com/samber/lo v1.47.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
-	github.com/spf13/cobra v1.8.0
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/cobra v1.8.1
+	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.17.1
 	github.com/vishvananda/netlink v1.3.0
 	github.com/xtaci/kcp-go/v5 v5.6.13
+	go.etcd.io/bbolt v1.4.0
 	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.52.0
 	golang.org/x/oauth2 v0.28.0

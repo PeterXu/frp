@@ -99,6 +99,9 @@ type ServerCommonConf struct {
 	// DashboardPwd specifies the password that the dashboard will use for
 	// login.
 	DashboardPwd string `ini:"dashboard_pwd" json:"dashboard_pwd"`
+	// StateFile specifies the path to the bbolt database file for persistent state storage.
+	// If this value is "", no persistent state storage will be used. By default, this value is "".
+	StateFile string `ini:"state_file" json:"state_file"`
 	// EnablePrometheus will export prometheus metrics on {dashboard_addr}:{dashboard_port}
 	// in /metrics api.
 	EnablePrometheus bool `ini:"enable_prometheus" json:"enable_prometheus"`

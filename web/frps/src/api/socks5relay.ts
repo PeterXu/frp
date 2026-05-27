@@ -33,3 +33,19 @@ export const getSocks5RelayRetention = () => {
 export const setSocks5RelayRetention = (seconds: number) => {
   return http.put<RetentionSetting>('../api/socks5relay/retention', { retentionSeconds: seconds })
 }
+
+export const disableSocks5RelayGroup = (group: string) => {
+  return http.put<{ success: boolean; disabled: boolean }>(`../api/socks5relay/group/${group}/disable`)
+}
+
+export const enableSocks5RelayGroup = (group: string) => {
+  return http.put<{ success: boolean; disabled: boolean }>(`../api/socks5relay/group/${group}/enable`)
+}
+
+export const disableSocks5RelayClient = (key: string) => {
+  return http.put<{ success: boolean; disabled: boolean }>(`../api/socks5relay/client/${key}/disable`)
+}
+
+export const enableSocks5RelayClient = (key: string) => {
+  return http.put<{ success: boolean; disabled: boolean }>(`../api/socks5relay/client/${key}/enable`)
+}
