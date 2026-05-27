@@ -42,6 +42,11 @@ func NewSessionManager(groupRegistry *Socks5RelayGroupRegistry, ctlManager *Cont
 // When userID is empty, always round-robin without session binding.
 // Returns the Control and the proxyName needed for work connection dispatch.
 func (sm *SessionManager) SelectFrpc(group, userID string) (*Control, string, error) {
+	// Check if group is disabled
+	if sm.groupRegistry.IsGroupDisabled(group) {
+		return nil, "", fmt.Errorf("group [%s] is disabled", group)
+	}
+
 	// Session affinity: only when userID is present
 	if userID != "" {
 		sessionKey := group + "@" + userID
@@ -50,16 +55,34 @@ func (sm *SessionManager) SelectFrpc(group, userID string) (*Control, string, er
 		sm.mu.RUnlock()
 
 		if hasBinding {
-			ctl, ok := sm.ctlManager.GetByID(boundRunID)
-			if ok {
-				proxyName := sm.groupRegistry.GetProxyName(group, boundRunID)
-				return ctl, proxyName, nil
+			// Check if the bound client is disabled
+			if sm.groupRegistry.IsClientDisabled(boundRunID) {
+				// Clear the binding and fall through to select a new client
+				sm.mu.Lock()
+				delete(sm.sessions, sessionKey)
+				sm.mu.Unlock()
+			} else {
+				ctl, ok := sm.ctlManager.GetByID(boundRunID)
+				if ok {
+					proxyName := sm.groupRegistry.GetProxyName(group, boundRunID)
+					return ctl, proxyName, nil
+				}
 			}
 		}
 	}
 
 	members := sm.groupRegistry.GetGroupMembers(group)
-	if len(members) == 0 {
+
+	// Filter out disabled clients
+	enabledMembers := make([]string, 0, len(members))
+	for _, runID := range members {
+		if sm.groupRegistry.IsClientDisabled(runID) {
+			continue
+		}
+		enabledMembers = append(enabledMembers, runID)
+	}
+
+	if len(enabledMembers) == 0 {
 		return nil, "", fmt.Errorf("no available frpc in group [%s]", group)
 	}
 
@@ -73,8 +96,8 @@ func (sm *SessionManager) SelectFrpc(group, userID string) (*Control, string, er
 
 	// Try members starting from round-robin position, skip offline ones
 	startIdx := counter.Add(1) - 1
-	for i := 0; i < len(members); i++ {
-		runID := members[(startIdx+uint64(i))%uint64(len(members))]
+	for i := 0; i < len(enabledMembers); i++ {
+		runID := enabledMembers[(startIdx+uint64(i))%uint64(len(enabledMembers))]
 		ctl, ok := sm.ctlManager.GetByID(runID)
 		if !ok {
 			continue // skip offline member
