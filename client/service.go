@@ -548,6 +548,18 @@ func (s *statusExporterImpl) GetProxyStatus(name string) (*proxy.WorkingStatus, 
 	return s.getProxyStatusFunc(name)
 }
 
+// PoolStatus handles GET /api/pool/status
+func (svr *Service) PoolStatus(_ *httppkg.Context) (any, error) {
+	svr.ctlMu.RLock()
+	pool := svr.pool
+	svr.ctlMu.RUnlock()
+
+	if pool == nil {
+		return nil, httppkg.NewError(http.StatusNotFound, "connection pool is not active (single-protocol mode)")
+	}
+	return pool.GetStatus(), nil
+}
+
 func (svr *Service) reloadConfigFromSources() error {
 	svr.reloadMu.Lock()
 	defer svr.reloadMu.Unlock()

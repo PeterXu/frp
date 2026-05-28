@@ -25,7 +25,7 @@ import (
 
 func TestClientRegistryRegisterStoresWireProtocol(t *testing.T) {
 	registry := NewClientRegistry()
-	key, conflict := registry.Register("user", "client-id", "run-id", "host", "1.0.0", "127.0.0.1", wire.ProtocolV2)
+	key, conflict := registry.Register("user", "client-id", "run-id", "", "host", "1.0.0", "127.0.0.1", wire.ProtocolV2)
 	if conflict {
 		t.Fatal("unexpected client conflict")
 	}
@@ -44,7 +44,7 @@ func TestClientRegistryUsesClockForTimestamps(t *testing.T) {
 	clk := clocktesting.NewFakeClock(start)
 	registry := newClientRegistryWithClock(clk)
 
-	key, conflict := registry.Register("user", "client-id", "run-id", "host", "1.0.0", "127.0.0.1", wire.ProtocolV2)
+	key, conflict := registry.Register("user", "client-id", "run-id", "", "host", "1.0.0", "127.0.0.1", wire.ProtocolV2)
 	if conflict {
 		t.Fatal("unexpected client conflict")
 	}

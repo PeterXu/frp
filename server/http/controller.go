@@ -97,6 +97,7 @@ func (c *Controller) APIClientList(ctx *httppkg.Context) (any, error) {
 	userFilter := ctx.Query("user")
 	clientIDFilter := ctx.Query("clientId")
 	runIDFilter := ctx.Query("runId")
+	poolIDFilter := ctx.Query("poolId")
 	statusFilter := strings.ToLower(ctx.Query("status"))
 
 	records := c.clientRegistry.List()
@@ -111,6 +112,9 @@ func (c *Controller) APIClientList(ctx *httppkg.Context) (any, error) {
 		if runIDFilter != "" && info.RunID != runIDFilter {
 			continue
 		}
+		if poolIDFilter != "" && info.PoolID != poolIDFilter {
+			continue
+		}
 		if !matchStatusFilter(info.Online, statusFilter) {
 			continue
 		}
@@ -119,6 +123,9 @@ func (c *Controller) APIClientList(ctx *httppkg.Context) (any, error) {
 
 	slices.SortFunc(items, func(a, b model.ClientInfoResp) int {
 		if v := cmp.Compare(a.User, b.User); v != 0 {
+			return v
+		}
+		if v := cmp.Compare(a.PoolID, b.PoolID); v != 0 {
 			return v
 		}
 		if v := cmp.Compare(a.ClientID, b.ClientID); v != 0 {
@@ -290,6 +297,7 @@ func buildClientInfoResp(info registry.ClientInfo) model.ClientInfoResp {
 		User:             info.User,
 		ClientID:         info.ClientID(),
 		RunID:            info.RunID,
+		PoolID:           info.PoolID,
 		Version:          info.Version,
 		WireProtocol:     info.WireProtocol,
 		Hostname:         info.Hostname,

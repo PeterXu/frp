@@ -40,3 +40,20 @@ type ProxyListResp struct {
 type VisitorListResp struct {
 	Visitors []VisitorDefinition `json:"visitors"`
 }
+
+// PoolStatusResp is the response for GET /api/pool/status
+type PoolStatusResp struct {
+	PoolID      string           `json:"pool_id"`
+	Protocols   []string         `json:"protocols"`
+	Active      string           `json:"active"`
+	Connections []PoolConnStatus `json:"connections"`
+}
+
+// PoolConnStatus describes one connection in the pool.
+type PoolConnStatus struct {
+	Protocol string `json:"protocol"`
+	Active   bool   `json:"active"`
+	RTT      string `json:"rtt"`
+	Alive    bool   `json:"alive"`
+	LastPong int64  `json:"last_pong,omitempty"`
+}

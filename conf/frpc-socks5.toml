@@ -87,7 +87,17 @@ transport.tcpMuxKeepaliveInterval = 30
 
 # Communication protocol used to connect to server
 # supports tcp, kcp, quic, websocket and wss now, default is tcp
-transport.protocol = "tcp"
+# transport.protocol = "tcp"
+
+# Multi-protocol connection pool: establish multiple connections simultaneously
+# and select the best one based on network quality (RTT, jitter).
+# When set, transport.protocol is ignored.
+transport.protocols = ["tcp", "quic"]
+
+# Minimum improvement ratio required to trigger connection switch.
+# For example, 0.3 means only switch if new connection RTT is 30% better.
+# Default: 0.3
+transport.switchTolerance = 0.3
 
 # FRP wire protocol used inside the selected transport.
 # supports v1 and v2, default is v1.

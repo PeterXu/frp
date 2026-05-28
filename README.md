@@ -88,6 +88,7 @@ frp also offers a P2P connect mode.
     * [TCP Stream Multiplexing](#tcp-stream-multiplexing)
     * [Support KCP Protocol](#support-kcp-protocol)
     * [Support QUIC Protocol](#support-quic-protocol)
+    * [Multi-Protocol Connection Pool](#multi-protocol-connection-pool)
     * [Connection Pooling](#connection-pooling)
     * [Load balancing](#load-balancing)
     * [Service Health Check](#service-health-check)
@@ -927,6 +928,58 @@ Using QUIC in frp:
   serverPort = 7000
   transport.protocol = "quic"
   ```
+
+### Multi-Protocol Connection Pool
+
+frpc can establish connections using multiple transport protocols simultaneously (e.g., TCP + QUIC) and dynamically select the best one for traffic based on real-time network quality (RTT, jitter, packet loss). This provides automatic failover and continuous connectivity without service interruption.
+
+1. Configure frps to listen on multiple protocols:
+
+  ```toml
+  # frps.toml
+  bindPort = 7000        # TCP
+  quicBindPort = 7000    # QUIC (can use same port as TCP)
+  ```
+
+2. Configure frpc to use multiple protocols:
+
+  ```toml
+  # frpc.toml
+  serverAddr = "x.x.x.x"
+  serverPort = 7000
+  transport.protocols = ["tcp", "quic"]
+  transport.switchTolerance = 0.3  # minimum improvement ratio to trigger switch
+  ```
+
+When `transport.protocols` is set, frpc establishes one connection per protocol. All connections share a common PoolID, but each has a unique RunID. The connection pool continuously monitors RTT via heartbeat responses and switches the active connection when network quality improves beyond the tolerance threshold.
+
+#### Monitoring Pool Status
+
+**frpc Admin API:**
+
+Access `http://127.0.0.1:7400/api/pool/status` to view the current pool state:
+
+```json
+{
+  "pool_id": "abc123",
+  "protocols": ["tcp", "quic"],
+  "active": "tcp",
+  "connections": [
+    {"protocol": "tcp", "active": true, "rtt": "15ms", "alive": true},
+    {"protocol": "quic", "active": false, "rtt": "12ms", "alive": true}
+  ]
+}
+```
+
+**frps Dashboard:**
+
+Pool connections appear in the frps client list (`/api/clients`) with a shared `poolID` field. You can filter by pool ID:
+
+```
+GET /api/clients?poolId=abc123
+```
+
+Pool member entries use keys like `user.clientID#runID` to distinguish multiple connections within the same pool, but share the same `poolID` for grouping.
 
 ### Connection Pooling
 

@@ -880,7 +880,7 @@ func (svr *Service) RegisterControl(
 	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
 		remoteAddr = host
 	}
-	_, conflict := svr.clientRegistry.Register(loginMsg.User, loginMsg.ClientID, loginMsg.RunID, loginMsg.Hostname, loginMsg.Version, remoteAddr, wireProtocol)
+	_, conflict := svr.clientRegistry.Register(loginMsg.User, loginMsg.ClientID, loginMsg.RunID, loginMsg.PoolID, loginMsg.Hostname, loginMsg.Version, remoteAddr, wireProtocol)
 	if conflict {
 		svr.ctlManager.Del(loginMsg.RunID, ctl)
 		return nil, fmt.Errorf("client_id [%s] for user [%s] is already online", loginMsg.ClientID, loginMsg.User)

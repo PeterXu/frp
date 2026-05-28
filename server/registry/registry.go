@@ -28,6 +28,7 @@ type ClientInfo struct {
 	User             string
 	RawClientID      string
 	RunID            string
+	PoolID           string
 	Hostname         string
 	IP               string
 	Version          string
@@ -63,7 +64,8 @@ func newClientRegistryWithClock(clk clock.PassiveClock) *ClientRegistry {
 }
 
 // Register stores/updates metadata for a client and returns the registry key plus whether it conflicts with an online client.
-func (cr *ClientRegistry) Register(user, rawClientID, runID, hostname, version, remoteAddr, wireProtocol string) (key string, conflict bool) {
+// When poolID is non-empty, multiple connections sharing the same poolID are allowed without conflict.
+func (cr *ClientRegistry) Register(user, rawClientID, runID, poolID, hostname, version, remoteAddr, wireProtocol string) (key string, conflict bool) {
 	if runID == "" {
 		return "", false
 	}
@@ -81,6 +83,28 @@ func (cr *ClientRegistry) Register(user, rawClientID, runID, hostname, version, 
 
 	info, exists := cr.clients[key]
 	if enforceUnique && exists && info.Online && info.RunID != "" && info.RunID != runID {
+		// Allow if this is a pool connection sharing the same PoolID
+		if poolID != "" && info.PoolID == poolID {
+			// Create a separate entry keyed by RunID for this pool member
+			poolKey := key + "#" + runID
+			poolInfo := &ClientInfo{
+				Key:              poolKey,
+				User:             user,
+				RawClientID:      rawClientID,
+				RunID:            runID,
+				PoolID:           poolID,
+				Hostname:         hostname,
+				IP:               remoteAddr,
+				Version:          version,
+				WireProtocol:     wireProtocol,
+				FirstConnectedAt: now,
+				LastConnectedAt:  now,
+				Online:           true,
+			}
+			cr.clients[poolKey] = poolInfo
+			cr.runIndex[runID] = poolKey
+			return poolKey, false
+		}
 		return key, true
 	}
 
@@ -97,6 +121,7 @@ func (cr *ClientRegistry) Register(user, rawClientID, runID, hostname, version, 
 
 	info.RawClientID = rawClientID
 	info.RunID = runID
+	info.PoolID = poolID
 	info.Hostname = hostname
 	info.IP = remoteAddr
 	info.Version = version
@@ -121,15 +146,26 @@ func (cr *ClientRegistry) MarkOfflineByRunID(runID string) {
 	if !ok {
 		return
 	}
-	if info, ok := cr.clients[key]; ok && info.RunID == runID {
-		if info.RawClientID == "" {
-			delete(cr.clients, key)
-		} else {
-			info.RunID = ""
-			info.Online = false
-			now := cr.clock.Now()
-			info.DisconnectedAt = now
-		}
+	info, exists := cr.clients[key]
+	if !exists || info.RunID != runID {
+		delete(cr.runIndex, runID)
+		return
+	}
+
+	// Pool member entries (key contains '#') are removed entirely on disconnect.
+	if info.PoolID != "" {
+		delete(cr.clients, key)
+		delete(cr.runIndex, runID)
+		return
+	}
+
+	if info.RawClientID == "" {
+		delete(cr.clients, key)
+	} else {
+		info.RunID = ""
+		info.Online = false
+		now := cr.clock.Now()
+		info.DisconnectedAt = now
 	}
 	delete(cr.runIndex, runID)
 }

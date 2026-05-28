@@ -26,6 +26,7 @@ import (
 	"github.com/fatedier/frp/pkg/auth"
 	v1 "github.com/fatedier/frp/pkg/config/v1"
 	"github.com/fatedier/frp/pkg/msg"
+	"github.com/fatedier/frp/pkg/util/util"
 	"github.com/fatedier/frp/pkg/util/xlog"
 	"github.com/fatedier/frp/pkg/vnet"
 )
@@ -68,6 +69,7 @@ type ConnPool struct {
 	switching   bool // true while a proactive switch is in progress
 	proxyCfgs   []v1.ProxyConfigurer
 	visitorCfgs []v1.VisitorConfigurer
+	poolID      string
 
 	common           *v1.ClientCommonConfig
 	auth             *auth.ClientAuth
@@ -88,6 +90,7 @@ func NewConnPool(
 	vnetController *vnet.Controller,
 	connectorCreator func(context.Context, *v1.ClientCommonConfig) Connector,
 ) *ConnPool {
+	poolID, _ := util.RandID()
 	return &ConnPool{
 		common:           common,
 		auth:             auth,
@@ -96,6 +99,7 @@ func NewConnPool(
 		connectorCreator: connectorCreator,
 		activeIdx:        -1,
 		doneCh:           make(chan struct{}),
+		poolID:           poolID,
 	}
 }
 
@@ -169,6 +173,7 @@ func (p *ConnPool) dialProtocol(protocol string) (*poolEntry, error) {
 		auth:           p.auth,
 		clientSpec:     p.clientSpec,
 		vnetController: p.vnetController,
+		poolID:         p.poolID,
 		connectorCreator: func(ctx context.Context, cfg *v1.ClientCommonConfig) Connector {
 			return NewConnectorWithProtocol(ctx, cfg, protocol)
 		},
@@ -530,6 +535,49 @@ func (p *ConnPool) getVisitorCfg(name string) (v1.VisitorConfigurer, bool) {
 		return p.entries[p.activeIdx].ctl.vm.GetVisitorCfg(name)
 	}
 	return nil, false
+}
+
+// PoolID returns the unique identifier shared by all connections in this pool.
+func (p *ConnPool) PoolID() string {
+	return p.poolID
+}
+
+// GetStatus returns a snapshot of the pool's current state for the admin API.
+func (p *ConnPool) GetStatus() map[string]any {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	protocols := p.common.Transport.Protocols
+	active := ""
+	conns := make([]map[string]any, 0, len(p.entries))
+
+	for i, entry := range p.entries {
+		status := map[string]any{
+			"protocol": entry.protocol,
+			"active":   i == p.activeIdx,
+		}
+		if entry.ctl != nil {
+			status["alive"] = entry.ctl.IsAlive()
+			status["rtt"] = entry.ctl.GetRTT().String()
+			if lp := entry.ctl.lastPong.Load(); lp != nil {
+				status["last_pong"] = lp.(time.Time).Unix()
+			}
+		} else {
+			status["alive"] = false
+			status["rtt"] = "n/a"
+		}
+		conns = append(conns, status)
+		if i == p.activeIdx {
+			active = entry.protocol
+		}
+	}
+
+	return map[string]any{
+		"pool_id":     p.poolID,
+		"protocols":   protocols,
+		"active":      active,
+		"connections": conns,
+	}
 }
 
 func boolPtr(b bool) *bool { return &b }

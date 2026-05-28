@@ -42,6 +42,7 @@ type controlSessionDialer struct {
 	auth           *auth.ClientAuth
 	clientSpec     *msg.ClientSpec
 	vnetController *vnet.Controller
+	poolID         string
 
 	connectorCreator func(context.Context, *v1.ClientCommonConfig) Connector
 }
@@ -115,6 +116,7 @@ func (d *controlSessionDialer) buildLoginMsg(previousRunID string) (*msg.Login, 
 		Timestamp: time.Now().Unix(),
 		RunID:     previousRunID,
 		Metas:     d.common.Metadatas,
+		PoolID:    d.poolID,
 	}
 	if d.common.Group != "" {
 		if loginMsg.Metas == nil {

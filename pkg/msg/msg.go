@@ -90,6 +90,11 @@ type Login struct {
 
 	// Some global configures.
 	PoolCount int `json:"pool_count,omitempty"`
+
+	// PoolID identifies connections belonging to the same connection pool.
+	// When frpc uses multi-protocol mode, all pool connections share the same PoolID
+	// so frps can group them together.
+	PoolID string `json:"pool_id,omitempty"`
 }
 
 type LoginResp struct {
