@@ -288,6 +288,12 @@ func (p *ConnPool) evaluateAndSwitch() {
 	}
 
 	activeRTT := p.entries[p.activeIdx].ctl.GetRTT()
+
+	// Skip comparison if active connection has no RTT measurement yet
+	if activeRTT == 0 {
+		return
+	}
+
 	tolerance := time.Duration(p.common.Transport.SwitchTolerance) * time.Millisecond
 
 	// Only switch if RTT difference exceeds tolerance threshold
