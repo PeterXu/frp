@@ -71,7 +71,7 @@ c.SwitchTolerance = util.EmptyOr(c.SwitchTolerance, 0.3)
 Example config:
 ```toml
 transport.protocols = ["tcp", "quic"]
-transport.switchTolerance = 0.3
+transport.switchTolerance = 30
 ```
 
 ### Step 2: RTT Measurement in Control (`client/control.go`)

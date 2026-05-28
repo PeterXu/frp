@@ -948,7 +948,7 @@ frpc can establish connections using multiple transport protocols simultaneously
   serverAddr = "x.x.x.x"
   serverPort = 7000
   transport.protocols = ["tcp", "quic"]
-  transport.switchTolerance = 0.3  # minimum improvement ratio to trigger switch
+  transport.switchTolerance = 20  # minimum RTT improvement in ms to trigger switch
   ```
 
 When `transport.protocols` is set, frpc establishes one connection per protocol. All connections share a common PoolID, but each has a unique RunID. The connection pool continuously monitors RTT via heartbeat responses and switches the active connection when network quality improves beyond the tolerance threshold.

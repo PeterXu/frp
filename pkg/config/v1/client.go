@@ -147,15 +147,15 @@ type ClientTransportConfig struct {
 	TLS TLSClientConfig `json:"tls,omitempty"`
 	// Protocols specifies a list of transport protocols to use simultaneously.
 	// frpc will establish one connection per protocol and select the best one
-	// for traffic based on network quality (RTT, jitter). Valid values:
+	// for traffic based on network quality (RTT). Valid values:
 	// "tcp", "kcp", "quic", "websocket", "wss". When set, it overrides the
 	// single Protocol field. By default, this value is empty (single protocol mode).
 	Protocols []string `json:"protocols,omitempty"`
-	// SwitchTolerance is the minimum quality improvement ratio required to
-	// trigger a proactive connection switch. For example, 0.3 means only
-	// switch if the candidate connection's quality score is at least 30%
-	// better than the current active. Default: 0.3
-	SwitchTolerance float64 `json:"switchTolerance,omitempty"`
+	// SwitchTolerance is the minimum RTT improvement (in milliseconds) required to
+	// trigger a proactive connection switch. For example, 20 means only switch if
+	// the candidate connection's RTT is at least 20ms lower than the current active.
+	// Default: 20 (20ms)
+	SwitchTolerance int64 `json:"switchTolerance,omitempty"`
 }
 
 func (c *ClientTransportConfig) Complete() {
@@ -181,7 +181,7 @@ func (c *ClientTransportConfig) Complete() {
 	if len(c.Protocols) == 0 && c.Protocol != "" {
 		c.Protocols = []string{c.Protocol}
 	}
-	c.SwitchTolerance = util.EmptyOr(c.SwitchTolerance, 0.3)
+	c.SwitchTolerance = util.EmptyOr(c.SwitchTolerance, 20)
 	c.QUIC.Complete()
 	c.TLS.Complete()
 }

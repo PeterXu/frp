@@ -37,18 +37,6 @@ const (
 	reconnectInterval = 5 * time.Second
 )
 
-// ConnQuality holds measured network metrics for one pool connection.
-type ConnQuality struct {
-	RTT      time.Duration
-	Jitter   time.Duration
-	LastPong time.Time
-}
-
-// Score returns a quality score (lower is better).
-func (q ConnQuality) Score() float64 {
-	return float64(q.RTT) + 0.5*float64(q.Jitter)
-}
-
 // poolEntry wraps one Control with its protocol metadata.
 type poolEntry struct {
 	protocol string
@@ -281,15 +269,16 @@ func (p *ConnPool) evaluateAndSwitch() {
 		return
 	}
 
+	// Find the connection with lowest RTT
 	bestIdx := -1
-	bestScore := math.MaxFloat64
+	bestRTT := time.Duration(math.MaxInt64)
 	for i, entry := range p.entries {
 		if entry.ctl == nil || !entry.ctl.IsAlive() {
 			continue
 		}
-		q := p.collectQuality(entry)
-		if s := q.Score(); s < bestScore {
-			bestScore = s
+		rtt := entry.ctl.GetRTT()
+		if rtt > 0 && rtt < bestRTT {
+			bestRTT = rtt
 			bestIdx = i
 		}
 	}
@@ -298,27 +287,15 @@ func (p *ConnPool) evaluateAndSwitch() {
 		return
 	}
 
-	activeQ := p.collectQuality(p.entries[p.activeIdx])
-	bestQ := p.collectQuality(p.entries[bestIdx])
+	activeRTT := p.entries[p.activeIdx].ctl.GetRTT()
+	tolerance := time.Duration(p.common.Transport.SwitchTolerance) * time.Millisecond
 
-	activeScore := activeQ.Score()
-	if activeScore == 0 {
-		activeScore = 1
-	}
-	improvement := (activeScore - bestScore) / activeScore
-	if improvement > p.common.Transport.SwitchTolerance {
-		p.xl.Infof("[%s] quality (%v) is %.0f%% better than active [%s] (%v), switching",
-			p.entries[bestIdx].protocol, bestQ.RTT, improvement*100,
-			p.entries[p.activeIdx].protocol, activeQ.RTT)
+	// Only switch if RTT difference exceeds tolerance threshold
+	if activeRTT - bestRTT > tolerance {
+		p.xl.Infof("[%s] RTT (%v) is %v better than active [%s] (%v), switching",
+			p.entries[bestIdx].protocol, bestRTT, activeRTT-bestRTT,
+			p.entries[p.activeIdx].protocol, activeRTT)
 		go p.switchActiveTo(bestIdx)
-	}
-}
-
-// collectQuality reads current metrics from a pool entry's Control.
-func (p *ConnPool) collectQuality(entry *poolEntry) ConnQuality {
-	return ConnQuality{
-		RTT:      entry.ctl.GetRTT(),
-		LastPong: entry.ctl.lastPong.Load().(time.Time),
 	}
 }
 
@@ -368,21 +345,22 @@ func (p *ConnPool) handleActiveFailure(failedIdx int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// Find the connection with lowest RTT
 	bestIdx := -1
-	bestScore := math.MaxFloat64
+	bestRTT := time.Duration(math.MaxInt64)
 	for i, entry := range p.entries {
 		if i == failedIdx || entry.ctl == nil || !entry.ctl.IsAlive() {
 			continue
 		}
-		q := p.collectQuality(entry)
-		if s := q.Score(); s < bestScore {
-			bestScore = s
+		rtt := entry.ctl.GetRTT()
+		if rtt > 0 && rtt < bestRTT {
+			bestRTT = rtt
 			bestIdx = i
 		}
 	}
 
 	if bestIdx >= 0 {
-		p.xl.Infof("active connection lost, failing over to [%s]", p.entries[bestIdx].protocol)
+		p.xl.Infof("active connection lost, failing over to [%s] (RTT %v)", p.entries[bestIdx].protocol, bestRTT)
 		p.activeIdx = bestIdx
 		p.entries[bestIdx].ctl.SetInWorkConnCallback(p.handleWorkConnCb)
 		p.entries[bestIdx].ctl.RegisterAll(p.proxyCfgs, p.visitorCfgs)
