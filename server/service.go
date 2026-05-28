@@ -228,7 +228,7 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 	svr.rc.TCPMuxGroupCtl = group.NewTCPMuxGroupCtl(svr.rc.TCPMuxHTTPConnectMuxer)
 
 	// Initialize SOCKS5 relay components
-	svr.groupRegistry = NewSocks5RelayGroupRegistry(nil) // StateStore will be set later via SetStateStore
+	svr.groupRegistry = NewSocks5RelayGroupRegistry(nil)                           // StateStore will be set later via SetStateStore
 	svr.sessionManager = NewSessionManager(svr.groupRegistry, svr.ctlManager, nil) // StateStore will be set later via SetStateStore
 	// Default to 10 minutes retention if not specified (0 = disabled)
 	retentionDuration := time.Duration(cfg.ConnRetentionDuration) * time.Second

@@ -112,6 +112,18 @@ func (vm *Manager) Close() {
 	}
 }
 
+// StopVisitors closes all visitors and clears internal state without closing
+// the manager's keep-alive goroutine. The manager can be reused with UpdateAll.
+func (vm *Manager) StopVisitors() {
+	vm.mu.Lock()
+	defer vm.mu.Unlock()
+	for _, v := range vm.visitors {
+		v.Close()
+	}
+	vm.visitors = make(map[string]Visitor)
+	vm.cfgs = make(map[string]v1.VisitorConfigurer)
+}
+
 // Hold lock before calling this function.
 func (vm *Manager) startVisitor(cfg v1.VisitorConfigurer) (err error) {
 	xl := xlog.FromContextSafe(vm.ctx)

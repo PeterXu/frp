@@ -93,6 +93,18 @@ func NewConnector(ctx context.Context, cfg *v1.ClientCommonConfig) Connector {
 	}
 }
 
+// NewConnectorWithProtocol creates a connector that uses a specific transport protocol,
+// overriding the one in cfg. It copies the config to avoid mutating the original.
+func NewConnectorWithProtocol(ctx context.Context, cfg *v1.ClientCommonConfig, protocol string) Connector {
+	cfgCopy := *cfg
+	cfgCopy.Transport.Protocol = protocol
+	// QUIC does not use TCP multiplexing.
+	if strings.EqualFold(protocol, "quic") {
+		cfgCopy.Transport.TCPMux = lo.ToPtr(false)
+	}
+	return NewConnector(ctx, &cfgCopy)
+}
+
 // Open opens an underlying connection to the server.
 // The underlying connection is either a TCP connection or a QUIC connection.
 // After the underlying connection is established, you can call Connect() to get a stream.

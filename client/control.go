@@ -68,6 +68,11 @@ type Control struct {
 	// of time.Time, last time got the Pong message
 	lastPong atomic.Value
 
+	// RTT measurement: time.Time of last Ping send, used to compute round-trip time.
+	lastPingSent atomic.Value
+	// RTT measurement: EWMA of measured round-trip durations (time.Duration).
+	rttEWMA atomic.Value
+
 	// The role of msgTransporter is similar to HTTP2.
 	// It allows multiple messages to be sent simultaneously on the same control connection.
 	// The server's response messages will be dispatched to the corresponding waiting goroutines based on the laneKey and message type.
@@ -186,6 +191,16 @@ func (ctl *Control) handlePong(m msg.Message) {
 		ctl.closeSession()
 		return
 	}
+	// Measure RTT from the last Ping send time.
+	if sentAt := ctl.lastPingSent.Load(); sentAt != nil {
+		rtt := time.Since(sentAt.(time.Time))
+		if prev := ctl.rttEWMA.Load(); prev == nil {
+			ctl.rttEWMA.Store(rtt)
+		} else {
+			newRTT := time.Duration(0.3*float64(rtt) + 0.7*float64(prev.(time.Duration)))
+			ctl.rttEWMA.Store(newRTT)
+		}
+	}
 	ctl.lastPong.Store(time.Now())
 	xl.Debugf("receive heartbeat from server")
 }
@@ -240,6 +255,7 @@ func (ctl *Control) heartbeatWorker() {
 				xl.Warnf("error during ping authentication: %v, skip sending ping message", err)
 				return false, err
 			}
+			ctl.lastPingSent.Store(time.Now())
 			_ = ctl.msgDispatcher.Send(pingMsg)
 			return false, nil
 		}
@@ -286,4 +302,38 @@ func (ctl *Control) UpdateAllConfigurer(proxyCfgs []v1.ProxyConfigurer, visitorC
 	ctl.vm.UpdateAll(visitorCfgs)
 	ctl.pm.UpdateAll(proxyCfgs)
 	return nil
+}
+
+// GetRTT returns the current EWMA round-trip time measured from heartbeats.
+func (ctl *Control) GetRTT() time.Duration {
+	if v := ctl.rttEWMA.Load(); v != nil {
+		return v.(time.Duration)
+	}
+	return 0
+}
+
+// IsAlive returns true if the control connection has not exited.
+func (ctl *Control) IsAlive() bool {
+	select {
+	case <-ctl.doneCh:
+		return false
+	default:
+		return true
+	}
+}
+
+// DeregisterAll stops all proxies and visitors without closing the connection.
+// It sends CloseProxy messages to the server for each proxy. The Control can
+// be reused by calling RegisterAll afterwards (used by connection pool switching).
+func (ctl *Control) DeregisterAll() {
+	ctl.pm.Close()
+	ctl.vm.StopVisitors()
+}
+
+// RegisterAll registers all proxies and visitors on this connection.
+// Used to activate a connection after it has been selected as the active one
+// in a connection pool.
+func (ctl *Control) RegisterAll(proxyCfgs []v1.ProxyConfigurer, visitorCfgs []v1.VisitorConfigurer) {
+	ctl.pm.UpdateAll(proxyCfgs)
+	ctl.vm.UpdateAll(visitorCfgs)
 }

@@ -145,6 +145,17 @@ type ClientTransportConfig struct {
 	HeartbeatTimeout int64 `json:"heartbeatTimeout,omitempty"`
 	// TLS specifies TLS settings for the connection to the server.
 	TLS TLSClientConfig `json:"tls,omitempty"`
+	// Protocols specifies a list of transport protocols to use simultaneously.
+	// frpc will establish one connection per protocol and select the best one
+	// for traffic based on network quality (RTT, jitter). Valid values:
+	// "tcp", "kcp", "quic", "websocket", "wss". When set, it overrides the
+	// single Protocol field. By default, this value is empty (single protocol mode).
+	Protocols []string `json:"protocols,omitempty"`
+	// SwitchTolerance is the minimum quality improvement ratio required to
+	// trigger a proactive connection switch. For example, 0.3 means only
+	// switch if the candidate connection's quality score is at least 30%
+	// better than the current active. Default: 0.3
+	SwitchTolerance float64 `json:"switchTolerance,omitempty"`
 }
 
 func (c *ClientTransportConfig) Complete() {
@@ -158,14 +169,19 @@ func (c *ClientTransportConfig) Complete() {
 	c.PoolCount = util.EmptyOr(c.PoolCount, 1)
 	c.TCPMux = util.EmptyOr(c.TCPMux, lo.ToPtr(true))
 	c.TCPMuxKeepaliveInterval = util.EmptyOr(c.TCPMuxKeepaliveInterval, 30)
-	if lo.FromPtr(c.TCPMux) {
+	if lo.FromPtr(c.TCPMux) && len(c.Protocols) <= 1 {
 		// If TCPMux is enabled, heartbeat of application layer is unnecessary because we can rely on heartbeat in tcpmux.
+		// Exception: when using multi-protocol pool mode, heartbeat must be enabled to measure RTT.
 		c.HeartbeatInterval = util.EmptyOr(c.HeartbeatInterval, -1)
 		c.HeartbeatTimeout = util.EmptyOr(c.HeartbeatTimeout, -1)
 	} else {
 		c.HeartbeatInterval = util.EmptyOr(c.HeartbeatInterval, 30)
 		c.HeartbeatTimeout = util.EmptyOr(c.HeartbeatTimeout, 90)
 	}
+	if len(c.Protocols) == 0 && c.Protocol != "" {
+		c.Protocols = []string{c.Protocol}
+	}
+	c.SwitchTolerance = util.EmptyOr(c.SwitchTolerance, 0.3)
 	c.QUIC.Complete()
 	c.TLS.Complete()
 }

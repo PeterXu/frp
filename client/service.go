@@ -111,8 +111,10 @@ func setServiceOptionsDefault(options *ServiceOptions) error {
 // Service is the client service that connects to frps and provides proxy services.
 type Service struct {
 	ctlMu sync.RWMutex
-	// manager control connection with server
+	// manager control connection with server (single-protocol mode)
 	ctl *Control
+	// pool manages multiple connections (multi-protocol mode). When non-nil, ctl is unused.
+	pool *ConnPool
 	// Uniq id got from frps, it will be attached to loginMsg.
 	runID string
 
@@ -271,7 +273,7 @@ func (svr *Service) Run(ctx context.Context) error {
 
 	// first login to frps
 	svr.loopLoginUntilSuccess(10*time.Second, lo.FromPtr(svr.common.LoginFailExit))
-	if svr.ctl == nil {
+	if svr.ctl == nil && svr.pool == nil {
 		cancelCause := cancelErr{}
 		_ = errors.As(context.Cause(svr.ctx), &cancelCause)
 		svr.stop()
@@ -286,7 +288,12 @@ func (svr *Service) Run(ctx context.Context) error {
 }
 
 func (svr *Service) keepControllerWorking() {
-	<-svr.ctl.Done()
+	// Wait for the initial connection to exit before starting reconnection loop.
+	if svr.pool != nil {
+		<-svr.pool.Done()
+	} else if svr.ctl != nil {
+		<-svr.ctl.Done()
+	}
 
 	// There is a situation where the login is successful but due to certain reasons,
 	// the control immediately exits. It is necessary to limit the frequency of reconnection in this case.
@@ -296,11 +303,15 @@ func (svr *Service) keepControllerWorking() {
 		// loopLoginUntilSuccess is another layer of loop that will continuously attempt to
 		// login to the server until successful.
 		svr.loopLoginUntilSuccess(20*time.Second, false)
+		if svr.pool != nil {
+			<-svr.pool.Done()
+			return false, errors.New("pool is closed and try another loop")
+		}
 		if svr.ctl != nil {
 			<-svr.ctl.Done()
 			return false, errors.New("control is closed and try another loop")
 		}
-		// If the control is nil, it means that the login failed and the service is also closed.
+		// If the control and pool are nil, it means that the login failed and the service is also closed.
 		return false, nil
 	}, wait.NewFastBackoffManager(
 		wait.FastBackoffOptions{
@@ -320,6 +331,32 @@ func (svr *Service) loopLoginUntilSuccess(maxInterval time.Duration, firstLoginE
 	xl := xlog.FromContextSafe(svr.ctx)
 
 	loginFunc := func() (bool, error) {
+		svr.cfgMu.RLock()
+		proxyCfgs := svr.proxyCfgs
+		visitorCfgs := svr.visitorCfgs
+		svr.cfgMu.RUnlock()
+
+		// Multi-protocol pool mode
+		if len(svr.common.Transport.Protocols) > 1 {
+			pool := NewConnPool(svr.common, svr.auth, svr.clientSpec,
+				svr.vnetController, svr.connectorCreator)
+			pool.SetInWorkConnCallback(svr.handleWorkConnCb)
+			pool.Run(svr.ctx, proxyCfgs, visitorCfgs)
+
+			svr.ctlMu.Lock()
+			if svr.ctl != nil {
+				svr.ctl.Close()
+			}
+			if svr.pool != nil {
+				svr.pool.Close()
+			}
+			svr.pool = pool
+			svr.ctl = nil
+			svr.ctlMu.Unlock()
+			return true, nil
+		}
+
+		// Single-protocol mode (existing path)
 		xl.Infof("try to connect to server...")
 		dialer := &controlSessionDialer{
 			ctx:              svr.ctx,
@@ -342,11 +379,6 @@ func (svr *Service) loopLoginUntilSuccess(maxInterval time.Duration, firstLoginE
 		xl.AddPrefix(xlog.LogPrefix{Name: "runID", Value: svr.runID})
 		xl.Infof("login to server success, get run id [%s]", svr.runID)
 
-		svr.cfgMu.RLock()
-		proxyCfgs := svr.proxyCfgs
-		visitorCfgs := svr.visitorCfgs
-		svr.cfgMu.RUnlock()
-
 		ctl, err := NewControl(svr.ctx, sessionCtx)
 		if err != nil {
 			sessionCtx.Conn.Close()
@@ -357,12 +389,15 @@ func (svr *Service) loopLoginUntilSuccess(maxInterval time.Duration, firstLoginE
 		ctl.SetInWorkConnCallback(svr.handleWorkConnCb)
 
 		ctl.Run(proxyCfgs, visitorCfgs)
-		// close and replace previous control
 		svr.ctlMu.Lock()
 		if svr.ctl != nil {
 			svr.ctl.Close()
 		}
+		if svr.pool != nil {
+			svr.pool.Close()
+		}
 		svr.ctl = ctl
+		svr.pool = nil
 		svr.ctlMu.Unlock()
 		return true, nil
 	}
@@ -385,10 +420,14 @@ func (svr *Service) UpdateAllConfigurer(proxyCfgs []v1.ProxyConfigurer, visitorC
 
 	svr.ctlMu.RLock()
 	ctl := svr.ctl
+	pool := svr.pool
 	svr.ctlMu.RUnlock()
 
+	if pool != nil {
+		return pool.UpdateAllConfigurer(proxyCfgs, visitorCfgs)
+	}
 	if ctl != nil {
-		return svr.ctl.UpdateAllConfigurer(proxyCfgs, visitorCfgs)
+		return ctl.UpdateAllConfigurer(proxyCfgs, visitorCfgs)
 	}
 	return nil
 }
@@ -447,6 +486,10 @@ func (svr *Service) stop() {
 		svr.ctl.GracefulClose(svr.gracefulShutdownDuration)
 		svr.ctl = nil
 	}
+	if svr.pool != nil {
+		svr.pool.GracefulClose(svr.gracefulShutdownDuration)
+		svr.pool = nil
+	}
 	if svr.webServer != nil {
 		svr.webServer.Close()
 		svr.webServer = nil
@@ -460,8 +503,12 @@ func (svr *Service) stop() {
 func (svr *Service) getProxyStatus(name string) (*proxy.WorkingStatus, bool) {
 	svr.ctlMu.RLock()
 	ctl := svr.ctl
+	pool := svr.pool
 	svr.ctlMu.RUnlock()
 
+	if pool != nil {
+		return pool.getProxyStatus(name)
+	}
 	if ctl == nil {
 		return nil, false
 	}
@@ -471,8 +518,12 @@ func (svr *Service) getProxyStatus(name string) (*proxy.WorkingStatus, bool) {
 func (svr *Service) getVisitorCfg(name string) (v1.VisitorConfigurer, bool) {
 	svr.ctlMu.RLock()
 	ctl := svr.ctl
+	pool := svr.pool
 	svr.ctlMu.RUnlock()
 
+	if pool != nil {
+		return pool.getVisitorCfg(name)
+	}
 	if ctl == nil {
 		return nil, false
 	}
