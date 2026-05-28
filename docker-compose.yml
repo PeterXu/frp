@@ -23,6 +23,7 @@ services:
       - ./data/conf:/conf:ro
       - ./data/certs:/certs:ro
       - ./data/logs:/var/log/frp
+      - ./data/cache:/var/lib/frp:rw
     environment:
       - TZ=Asia/Shanghai
     healthcheck:

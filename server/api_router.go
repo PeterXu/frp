@@ -246,7 +246,7 @@ func (svr *Service) apiSocks5RelayGroupDisable(ctx *httppkg.Context) (any, error
 	}
 
 	if svr.stateStore == nil {
-		return nil, fmt.Errorf("state store unavailable")
+		return nil, httppkg.NewError(http.StatusBadRequest, "stateFile not configured; add stateFile to frps config to enable this feature")
 	}
 
 	if err := svr.stateStore.DisableGroup(group); err != nil {
@@ -268,7 +268,7 @@ func (svr *Service) apiSocks5RelayGroupEnable(ctx *httppkg.Context) (any, error)
 	}
 
 	if svr.stateStore == nil {
-		return nil, fmt.Errorf("state store unavailable")
+		return nil, httppkg.NewError(http.StatusBadRequest, "stateFile not configured; add stateFile to frps config to enable this feature")
 	}
 
 	if err := svr.stateStore.EnableGroup(group); err != nil {
@@ -290,7 +290,7 @@ func (svr *Service) apiSocks5RelayClientDisable(ctx *httppkg.Context) (any, erro
 	}
 
 	if svr.stateStore == nil {
-		return nil, fmt.Errorf("state store unavailable")
+		return nil, httppkg.NewError(http.StatusBadRequest, "stateFile not configured; add stateFile to frps config to enable this feature")
 	}
 
 	if err := svr.stateStore.DisableClient(key); err != nil {
@@ -312,7 +312,7 @@ func (svr *Service) apiSocks5RelayClientEnable(ctx *httppkg.Context) (any, error
 	}
 
 	if svr.stateStore == nil {
-		return nil, fmt.Errorf("state store unavailable")
+		return nil, httppkg.NewError(http.StatusBadRequest, "stateFile not configured; add stateFile to frps config to enable this feature")
 	}
 
 	if err := svr.stateStore.EnableClient(key); err != nil {
