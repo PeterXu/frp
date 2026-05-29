@@ -12,6 +12,7 @@ _test
 *.prof
 
 # Self
+data/
 bin/
 packages/
 release/
@@ -35,3 +36,7 @@ node_modules/
 .claude/
 .sisyphus/
 .superpowers/
+
+# others
+frps-local.toml
+frpc-local.toml

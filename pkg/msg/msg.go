@@ -131,6 +131,9 @@ type NewProxy struct {
 
 	// tcpmux
 	Multiplexer string `json:"multiplexer,omitempty"`
+
+	// socks5_relay
+	OutboundProxy string `json:"outbound_proxy,omitempty"`
 }
 
 type NewProxyResp struct {

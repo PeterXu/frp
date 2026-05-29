@@ -1,0 +1,36 @@
+# frps Docker Compose Configuration
+# 
+# Quick Start:
+#   1. docker-compose up -d
+#   2. Access at http://localhost:3000
+
+version: '3.4' # For compatibility with older Docker versions
+
+services:
+  frps:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile-for-frps
+    image: frps:local
+    restart: always
+    command: -c /conf/frps-socks5.toml
+    ports:
+      - "7000:7000"
+      - "7000:7000/udp"
+      - "7500:7500"
+      - "1081:1081"
+      - "1083:1083"
+    volumes:
+      - ./data/conf:/conf:ro
+      - ./data/certs:/certs:ro
+      - ./data/logs:/var/log/frp
+    environment:
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:7500/healthz || exit 1"]
+      #test: ["CMD-SHELL", "curl -f http://127.0.0.1:7500/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    #network_mode: host
+

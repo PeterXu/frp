@@ -1,0 +1,17 @@
+# frps configuration for SOCKS5/HTTP CONNECT relay testing
+bindAddr = "127.0.0.1"
+bindPort = 17000
+
+webServer.addr = "127.0.0.1"
+webServer.port = 17500
+webServer.assetsDir = "./web/frps/dist"
+
+auth.token = "test"
+
+# SOCKS5 proxy configuration
+socks5ProxyPort = 10800
+socks5ProxyAuthPassword = "testpass"
+
+# HTTP CONNECT proxy configuration  
+httpConnectProxyPort = 10801
+httpConnectProxyAuthPassword = "testpass"

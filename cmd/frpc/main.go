@@ -20,6 +20,9 @@ import (
 	_ "github.com/fatedier/frp/web/frpc"
 )
 
+// Version is set at build time via -ldflags "-X main.Version=..."
+var Version = "dev"
+
 func main() {
 	system.EnableCompatibilityMode()
 	sub.Execute()

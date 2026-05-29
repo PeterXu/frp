@@ -37,6 +37,9 @@ type ClientCommonConfig struct {
 	// clients. If this value is not "", proxy names will automatically be
 	// changed to "{user}.{proxy_name}".
 	User string `json:"user,omitempty"`
+	// Group specifies the socks5_relay group for this client. When TLS certificate
+	// has OU field, it overrides this value.
+	Group string `json:"group,omitempty"`
 	// ClientID uniquely identifies this frpc instance.
 	ClientID string `json:"clientID,omitempty"`
 
@@ -149,7 +152,9 @@ func (c *ClientTransportConfig) Complete() {
 	c.WireProtocol = util.EmptyOr(c.WireProtocol, "v1")
 	c.DialServerTimeout = util.EmptyOr(c.DialServerTimeout, 10)
 	c.DialServerKeepAlive = util.EmptyOr(c.DialServerKeepAlive, 7200)
-	c.ProxyURL = util.EmptyOr(c.ProxyURL, os.Getenv("http_proxy"))
+	c.ProxyURL = util.FirstNonEmpty(c.ProxyURL,
+		os.Getenv("http_proxy"), os.Getenv("HTTP_PROXY"),
+		os.Getenv("all_proxy"), os.Getenv("ALL_PROXY"))
 	c.PoolCount = util.EmptyOr(c.PoolCount, 1)
 	c.TCPMux = util.EmptyOr(c.TCPMux, lo.ToPtr(true))
 	c.TCPMuxKeepaliveInterval = util.EmptyOr(c.TCPMuxKeepaliveInterval, 30)
@@ -175,6 +180,11 @@ type TLSClientConfig struct {
 	// first custom byte when tls is enabled.
 	// Since v0.50.0, the default value has been changed to true, and the first custom byte is disabled by default.
 	DisableCustomTLSFirstByte *bool `json:"disableCustomTLSFirstByte,omitempty"`
+	// SkipServerNameVerify skips TLS server name verification while still
+	// verifying the server's certificate chain. This is useful when the
+	// server certificate's CN/SAN doesn't match the connection hostname.
+	// When set to true, the certificate chain and expiration are still verified.
+	SkipServerNameVerify bool `json:"skipServerNameVerify,omitempty"`
 
 	TLSConfig
 }

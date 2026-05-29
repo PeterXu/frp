@@ -16,6 +16,8 @@ package client
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -180,6 +182,19 @@ func NewService(options ServiceOptions) (*Service, error) {
 	proxyCfgs, visitorCfgs = config.FilterClientConfigurers(options.Common, proxyCfgs, visitorCfgs)
 	proxyCfgs = config.CompleteProxyConfigurers(proxyCfgs)
 	visitorCfgs = config.CompleteVisitorConfigurers(visitorCfgs)
+
+	// Parse TLS certificate for CN/OU to override user and socks5_relay group
+	if options.Common.Transport.TLS.CertFile != "" {
+		certCN, certOU := parseCertSubject(options.Common.Transport.TLS.CertFile)
+		if certCN != "" {
+			log.Infof("TLS cert CN [%s] overrides user [%s]", certCN, options.Common.User)
+			options.Common.User = certCN
+		}
+		if certOU != "" {
+			log.Infof("TLS cert OU [%s] overrides group [%s]", certOU, options.Common.Group)
+			options.Common.Group = certOU
+		}
+	}
 
 	// Create the web server after all fallible steps so its listener is not
 	// leaked when an earlier error causes NewService to return.
@@ -512,4 +527,28 @@ func (svr *Service) reloadConfigFromSourcesLocked() error {
 		return err
 	}
 	return nil
+}
+
+// parseCertSubject reads a TLS certificate file and returns its CN and first OU.
+func parseCertSubject(certFile string) (cn string, ou string) {
+	data, err := os.ReadFile(certFile)
+	if err != nil {
+		log.Warnf("parse cert subject: read %s failed: %v", certFile, err)
+		return
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		log.Warnf("parse cert subject: no PEM block found in %s", certFile)
+		return
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		log.Warnf("parse cert subject: parse certificate from %s failed: %v", certFile, err)
+		return
+	}
+	cn = cert.Subject.CommonName
+	if len(cert.Subject.OrganizationalUnit) > 0 {
+		ou = cert.Subject.OrganizationalUnit[0]
+	}
+	return
 }
