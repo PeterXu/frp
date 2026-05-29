@@ -15,6 +15,8 @@
 package http
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 
 	"github.com/fatedier/frp/pkg/util/log"
@@ -28,6 +30,21 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.code = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Flush implements http.Flusher interface for SSE support.
+func (rw *responseWriter) Flush() {
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// Hijack implements http.Hijacker interface for WebSocket support.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hijacker, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
 }
 
 func NewRequestLogger(next http.Handler) http.Handler {

@@ -109,11 +109,16 @@ func (c *defaultConnectorImpl) Open() error {
 			sn = c.cfg.ServerAddr
 		}
 		if lo.FromPtr(c.cfg.Transport.TLS.Enable) {
+			var tlsOpts []transport.TLSClientOption
+			if c.cfg.Transport.TLS.SkipServerNameVerify {
+				tlsOpts = append(tlsOpts, transport.WithSkipServerNameVerify())
+			}
 			tlsConfig, err = transport.NewClientTLSConfig(
 				c.cfg.Transport.TLS.CertFile,
 				c.cfg.Transport.TLS.KeyFile,
 				c.cfg.Transport.TLS.TrustedCaFile,
-				sn)
+				sn,
+				tlsOpts...)
 		} else {
 			tlsConfig, err = transport.NewClientTLSConfig("", "", "", sn)
 		}
@@ -194,11 +199,16 @@ func (c *defaultConnectorImpl) realConnect() (net.Conn, error) {
 			sn = c.cfg.ServerAddr
 		}
 
+		var tlsOpts []transport.TLSClientOption
+		if c.cfg.Transport.TLS.SkipServerNameVerify {
+			tlsOpts = append(tlsOpts, transport.WithSkipServerNameVerify())
+		}
 		tlsConfig, err = transport.NewClientTLSConfig(
 			c.cfg.Transport.TLS.CertFile,
 			c.cfg.Transport.TLS.KeyFile,
 			c.cfg.Transport.TLS.TrustedCaFile,
-			sn)
+			sn,
+			tlsOpts...)
 		if err != nil {
 			xl.Warnf("fail to build tls configuration, err: %v", err)
 			return nil, err
