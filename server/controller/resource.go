@@ -61,6 +61,26 @@ type ResourceController struct {
 
 	// All server manager plugin
 	PluginManager *plugin.Manager
+
+	// Socks5 relay group registry (interface satisfied by server.Socks5RelayGroupRegistry)
+	Socks5RelayGroupRegistry Socks5GroupRegistry
+	// Socks5 relay session manager (interface satisfied by server.SessionManager)
+	Socks5SessionManager Socks5SessionManager
+}
+
+// Socks5GroupRegistry manages socks5_relay group → frpc runID mappings.
+type Socks5GroupRegistry interface {
+	Register(group, runID, proxyName string)
+	Unregister(runID string)
+	GetGroupMembers(group string) []string
+	GetProxyName(group, runID string) string
+}
+
+// Socks5SessionManager manages socks5_relay session cleanup.
+// SelectFrpc is NOT in this interface — only the handlers call it, via the selectFrpcFn closure
+// from Service (which accesses SessionManager directly since they're in the same package).
+type Socks5SessionManager interface {
+	RemoveSession(runID string)
 }
 
 func (rc *ResourceController) Close() error {

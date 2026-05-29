@@ -38,6 +38,10 @@ type ServerInfoResp struct {
 	CurConns        int64            `json:"curConns"`
 	ClientCounts    int64            `json:"clientCounts"`
 	ProxyTypeCounts map[string]int64 `json:"proxyTypeCount"`
+
+	Socks5ProxyPort      int `json:"socks5ProxyPort"`
+	HTTPConnectProxyPort int `json:"httpConnectProxyPort"`
+	WebServerPort        int `json:"webServerPort"`
 }
 
 type ClientInfoResp struct {
@@ -94,6 +98,48 @@ type STCPOutConf struct {
 
 type XTCPOutConf struct {
 	BaseOutConf
+}
+
+type Socks5RelayOutConf struct {
+	BaseOutConf
+}
+
+type Socks5RelayGroupInfo struct {
+	Name    string                   `json:"name"`
+	Members []Socks5RelayGroupMember `json:"members"`
+}
+
+type Socks5RelayGroupMember struct {
+	RunID     string `json:"runID"`
+	ProxyName string `json:"proxyName"`
+	Online    bool   `json:"online"`
+}
+
+type Socks5RelaySessionInfo struct {
+	Username string `json:"username"`
+	RunID    string `json:"runID"`
+}
+
+type RelayConnectionInfo struct {
+	ID        string `json:"id"`
+	SourceIP  string `json:"sourceIP"`
+	Protocol  string `json:"protocol"`
+	Group     string `json:"group"`
+	DstAddr   string `json:"dstAddr"`
+	DstPort   int    `json:"dstPort"`
+	ProxyName string `json:"proxyName"`
+	RunID     string `json:"runID"`
+	StartTime int64  `json:"startTime"`
+	EndTime   *int64 `json:"endTime,omitempty"`
+	BytesIn   int64  `json:"bytesIn"`
+	BytesOut  int64  `json:"bytesOut"`
+	IsActive  bool   `json:"isActive"`
+}
+
+type RelayConnectionStats struct {
+	TotalConnections int   `json:"totalConnections"`
+	TotalBytesIn     int64 `json:"totalBytesIn"`
+	TotalBytesOut    int64 `json:"totalBytesOut"`
 }
 
 // Get proxy info.

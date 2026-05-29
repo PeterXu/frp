@@ -116,6 +116,12 @@ func (d *controlSessionDialer) buildLoginMsg(previousRunID string) (*msg.Login, 
 		RunID:     previousRunID,
 		Metas:     d.common.Metadatas,
 	}
+	if d.common.Group != "" {
+		if loginMsg.Metas == nil {
+			loginMsg.Metas = make(map[string]string)
+		}
+		loginMsg.Metas["group"] = d.common.Group
+	}
 	if d.clientSpec != nil {
 		loginMsg.ClientSpec = *d.clientSpec
 	}

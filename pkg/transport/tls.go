@@ -125,7 +125,36 @@ func NewServerTLSConfig(certPath, keyPath, caPath string) (*tls.Config, error) {
 	return base, nil
 }
 
-func NewClientTLSConfig(certPath, keyPath, caPath, serverName string) (*tls.Config, error) {
+// TLSClientOption is a functional option for NewClientTLSConfig.
+type TLSClientOption func(*tls.Config)
+
+// WithSkipServerNameVerify skips TLS server name verification while still
+// verifying the server's certificate chain. Useful when the server
+// certificate's CN/SAN doesn't match the connection hostname.
+func WithSkipServerNameVerify() TLSClientOption {
+	return func(cfg *tls.Config) {
+		if cfg.RootCAs == nil {
+			return
+		}
+		cfg.InsecureSkipVerify = true
+		cfg.VerifyConnection = func(state tls.ConnectionState) error {
+			opts := x509.VerifyOptions{
+				Roots:         cfg.RootCAs,
+				Intermediates: x509.NewCertPool(),
+			}
+			for _, cert := range state.PeerCertificates[1:] {
+				opts.Intermediates.AddCert(cert)
+			}
+			_, err := state.PeerCertificates[0].Verify(opts)
+			return err
+		}
+	}
+}
+
+// NewClientTLSConfig creates a client TLS configuration.
+// The original 4-parameter signature is preserved for backwards compatibility.
+// Use TLSClientOption values for additional configuration.
+func NewClientTLSConfig(certPath, keyPath, caPath, serverName string, opts ...TLSClientOption) (*tls.Config, error) {
 	base := &tls.Config{}
 
 	if certPath != "" && keyPath != "" {
@@ -146,9 +175,13 @@ func NewClientTLSConfig(certPath, keyPath, caPath, serverName string) (*tls.Conf
 		}
 
 		base.RootCAs = pool
-		base.InsecureSkipVerify = false
 	} else {
+		// No CA provided, skip all verification (including server name)
 		base.InsecureSkipVerify = true
+	}
+
+	for _, opt := range opts {
+		opt(base)
 	}
 
 	return base, nil

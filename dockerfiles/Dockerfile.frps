@@ -1,0 +1,46 @@
+# Step1
+FROM node:22-alpine AS web-builder
+
+COPY web/package.json /web/package.json
+COPY web/package-lock.json /web/package-lock.json
+COPY web/shared/ /web/shared/
+COPY web/frps/ /web/frps/
+WORKDIR /web
+RUN npm config set registry https://registry.npmmirror.com
+RUN npm install
+
+WORKDIR /web/frps
+RUN npm run build
+
+
+# Step2
+FROM golang:1.26.1-alpine AS building
+
+WORKDIR /building
+RUN mkdir -p /building/bin
+COPY go.mod /building/go.mod
+COPY go.sum /building/go.sum
+ENV GOPROXY=https://mirrors.aliyun.com/goproxy/,https://goproxy.cn,direct
+RUN go mod download
+
+#COPY . /building
+COPY assets /building/assets
+COPY pkg /building/pkg
+COPY client /building/client
+COPY server /building/server
+COPY cmd /building/cmd
+COPY web /building/web
+
+
+COPY --from=web-builder /web/frps/dist /building/web/frps/dist
+RUN env CGO_ENABLED=0 go build -ldflags "-s -w" -tags frps -o bin/frps ./cmd/frps
+
+
+# Step3
+FROM alpine:3
+
+RUN apk add --no-cache tzdata
+
+COPY --from=building /building/bin/frps /usr/bin/frps
+
+ENTRYPOINT ["/usr/bin/frps"]
