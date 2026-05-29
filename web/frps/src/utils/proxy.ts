@@ -149,6 +149,13 @@ class SUDPProxy extends BaseProxy {
   }
 }
 
+class Socks5RelayProxy extends BaseProxy {
+  constructor(proxyStats: any) {
+    super(proxyStats)
+    this.type = 'socks5_relay'
+  }
+}
+
 export {
   BaseProxy,
   TCPProxy,
@@ -158,4 +165,5 @@ export {
   HTTPSProxy,
   STCPProxy,
   SUDPProxy,
+  Socks5RelayProxy,
 }
