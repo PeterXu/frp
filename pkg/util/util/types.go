@@ -21,3 +21,14 @@ func EmptyOr[T comparable](v T, fallback T) T {
 	}
 	return v
 }
+
+// FirstNonEmpty returns the first non-zero value from the given values.
+func FirstNonEmpty[T comparable](vals ...T) T {
+	var zero T
+	for _, v := range vals {
+		if v != zero {
+			return v
+		}
+	}
+	return zero
+}

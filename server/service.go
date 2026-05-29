@@ -29,6 +29,7 @@ import (
 	"github.com/fatedier/golib/crypto"
 	"github.com/fatedier/golib/net/mux"
 	fmux "github.com/hashicorp/yamux"
+	"github.com/pires/go-proxyproto"
 	quic "github.com/quic-go/quic-go"
 	"github.com/samber/lo"
 
@@ -55,6 +56,7 @@ import (
 	"github.com/fatedier/frp/server/ports"
 	"github.com/fatedier/frp/server/proxy"
 	"github.com/fatedier/frp/server/registry"
+	"github.com/fatedier/frp/server/socks5proxy"
 	"github.com/fatedier/frp/server/visitor"
 )
 
@@ -119,6 +121,15 @@ type Service struct {
 	webServer *httppkg.Server
 
 	sshTunnelGateway *ssh.Gateway
+
+	// SOCKS5/HTTP CONNECT proxy handlers
+	socks5Handler      *socks5proxy.SOCKS5Handler
+	httpConnectHandler *socks5proxy.HTTPConnectHandler
+
+	// SOCKS5 relay session components
+	groupRegistry  *Socks5RelayGroupRegistry
+	sessionManager *SessionManager
+	connTracker    *socks5proxy.RelayConnTracker
 
 	// Auth runtime and encryption materials
 	auth *auth.ServerAuth
@@ -215,6 +226,15 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 	// Init TCP mux group controller
 	svr.rc.TCPMuxGroupCtl = group.NewTCPMuxGroupCtl(svr.rc.TCPMuxHTTPConnectMuxer)
 
+	// Initialize SOCKS5 relay components
+	svr.groupRegistry = NewSocks5RelayGroupRegistry()
+	svr.sessionManager = NewSessionManager(svr.groupRegistry, svr.ctlManager)
+	// 0 = disabled (no retention of closed connections)
+	retentionDuration := time.Duration(cfg.ConnRetentionDuration) * time.Second
+	svr.connTracker = socks5proxy.NewRelayConnTracker(retentionDuration)
+	svr.rc.Socks5RelayGroupRegistry = svr.groupRegistry
+	svr.rc.Socks5SessionManager = svr.sessionManager
+
 	// Init 404 not found page
 	vhost.NotFoundPagePath = cfg.Custom404Page
 
@@ -236,6 +256,14 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("create server listener error, %v", err)
+	}
+
+	// WARNING: ProxyProtocol wraps the main bind listener, so ALL incoming
+	// connections (including frpc control channel) must send PROXY protocol
+	// headers. Only enable when the entire traffic path is behind a Layer 4
+	// proxy (e.g., Nginx stream, HAProxy) that sends PROXY protocol headers.
+	if cfg.Transport.ProxyProtocol {
+		ln = &proxyproto.Listener{Listener: ln}
 	}
 
 	svr.muxer = mux.NewMux(ln)
@@ -280,6 +308,40 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		}
 		svr.sshTunnelGateway = sshGateway
 		log.Infof("frps sshTunnelGateway listen on port %d", cfg.SSHTunnelGateway.BindPort)
+	}
+
+	// Shared connection limit for SOCKS5 and HTTP CONNECT proxy ports
+	var proxyConnLimit chan struct{}
+	if cfg.MaxProxyConnections > 0 {
+		proxyConnLimit = make(chan struct{}, cfg.MaxProxyConnections)
+	}
+
+	// SOCKS5 proxy listener
+	if cfg.Socks5ProxyPort > 0 {
+		address := net.JoinHostPort(cfg.ProxyBindAddr, strconv.Itoa(cfg.Socks5ProxyPort))
+		l, err := net.Listen("tcp", address)
+		if err != nil {
+			return nil, fmt.Errorf("create socks5 proxy listener error: %v", err)
+		}
+		if cfg.Transport.ProxyProtocol {
+			l = &proxyproto.Listener{Listener: l}
+		}
+		svr.socks5Handler = socks5proxy.NewSOCKS5Handler(l, cfg.Socks5ProxyAuthPassword, svr.makeSelectFrpcFn(), svr.connTracker, proxyConnLimit)
+		log.Infof("socks5 proxy listen on %s", address)
+	}
+
+	// HTTP CONNECT proxy listener
+	if cfg.HTTPConnectProxyPort > 0 {
+		address := net.JoinHostPort(cfg.ProxyBindAddr, strconv.Itoa(cfg.HTTPConnectProxyPort))
+		l, err := net.Listen("tcp", address)
+		if err != nil {
+			return nil, fmt.Errorf("create http connect proxy listener error: %v", err)
+		}
+		if cfg.Transport.ProxyProtocol {
+			l = &proxyproto.Listener{Listener: l}
+		}
+		svr.httpConnectHandler = socks5proxy.NewHTTPConnectHandler(l, cfg.HTTPConnectProxyAuthPassword, svr.makeSelectFrpcFn(), svr.connTracker, proxyConnLimit)
+		log.Infof("http connect proxy listen on %s", address)
 	}
 
 	// Listen for accepting connections from client using websocket protocol.
@@ -389,6 +451,13 @@ func (svr *Service) Run(ctx context.Context) {
 		go svr.sshTunnelGateway.Run()
 	}
 
+	if svr.socks5Handler != nil {
+		go svr.socks5Handler.Run(svr.ctx)
+	}
+	if svr.httpConnectHandler != nil {
+		go svr.httpConnectHandler.Run(svr.ctx)
+	}
+
 	svr.HandleListener(svr.listener, false)
 
 	<-svr.ctx.Done()
@@ -423,7 +492,17 @@ func (svr *Service) Close() error {
 	if svr.sshTunnelGateway != nil {
 		svr.sshTunnelGateway.Close()
 	}
+	if svr.socks5Handler != nil {
+		svr.socks5Handler.Close()
+	}
+	if svr.httpConnectHandler != nil {
+		svr.httpConnectHandler.Close()
+	}
 	svr.rc.Close()
+	// Close connection tracker to stop cleanup goroutine
+	if svr.connTracker != nil {
+		svr.connTracker.Close()
+	}
 	svr.muxer.Close()
 	svr.ctlManager.Close()
 	if svr.cancel != nil {
@@ -845,4 +924,55 @@ func (svr *Service) RegisterVisitorConn(visitorConn net.Conn, newMsg *msg.NewVis
 	}
 	return svr.rc.VisitorManager.NewConn(newMsg.ProxyName, visitorConn, newMsg.Timestamp, newMsg.SignKey,
 		newMsg.UseEncryption, newMsg.UseCompression, visitorUser)
+}
+
+func (svr *Service) makeSelectFrpcFn() func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error) {
+	return func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error) {
+		members := svr.groupRegistry.GetGroupMembers(group)
+		maxAttempts := len(members)
+		if maxAttempts == 0 {
+			return nil, "", "", fmt.Errorf("no available frpc in group [%s]", group)
+		}
+
+		xl := xlog.FromContextSafe(svr.ctx)
+		var lastErr error
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			// Clear binding so SelectFrpc picks a different frpc on each attempt
+			if attempt > 0 && userID != "" {
+				svr.sessionManager.ClearBinding(group + "@" + userID)
+			}
+
+			ctl, proxyName, err := svr.sessionManager.SelectFrpc(group, userID)
+			if err != nil {
+				lastErr = err
+				xl.Debugf("select frpc attempt %d/%d for group [%s] failed: %v", attempt+1, maxAttempts, group, err)
+				continue
+			}
+
+			workConn, err := ctl.GetWorkConn()
+			if err != nil {
+				// Clear binding immediately so concurrent requests don't hit this frpc
+				if userID != "" {
+					svr.sessionManager.ClearBinding(group + "@" + userID)
+				}
+				lastErr = fmt.Errorf("get work connection error: %w", err)
+				xl.Debugf("get work conn attempt %d/%d for group [%s] proxy [%s] failed: %v", attempt+1, maxAttempts, group, proxyName, err)
+				continue
+			}
+
+			conn, err := workConn.Start(&msg.StartWorkConn{
+				ProxyName: proxyName,
+				DstAddr:   dstAddr,
+				DstPort:   dstPort,
+			})
+			if err != nil {
+				workConn.Close()
+				lastErr = fmt.Errorf("start work connection error: %w", err)
+				xl.Debugf("start work conn attempt %d/%d for group [%s] proxy [%s] failed: %v", attempt+1, maxAttempts, group, proxyName, err)
+				continue
+			}
+			return conn, proxyName, ctl.runID, nil
+		}
+		return nil, "", "", lastErr
+	}
 }

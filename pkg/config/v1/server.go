@@ -58,6 +58,22 @@ type ServerConfig struct {
 	TCPMuxHTTPConnectPort int `json:"tcpmuxHTTPConnectPort,omitempty"`
 	// If TCPMuxPassthrough is true, frps won't do any update on traffic.
 	TCPMuxPassthrough bool `json:"tcpmuxPassthrough,omitempty"`
+	// SOCKS5 proxy listener port, 0 means disabled
+	Socks5ProxyPort int `json:"socks5ProxyPort,omitempty"`
+	// SOCKS5 proxy authentication password
+	Socks5ProxyAuthPassword string `json:"socks5ProxyAuthPassword,omitempty"`
+
+	// HTTP CONNECT proxy listener port, 0 means disabled
+	HTTPConnectProxyPort int `json:"httpConnectProxyPort,omitempty"`
+	// HTTP CONNECT proxy authentication password
+	HTTPConnectProxyAuthPassword string `json:"httpConnectProxyAuthPassword,omitempty"`
+	// MaxProxyConnections limits concurrent connections accepted on the SOCKS5/HTTP CONNECT
+	// proxy ports. 0 means unlimited.
+	MaxProxyConnections int `json:"maxProxyConnections,omitempty"`
+	// ConnRetentionDuration specifies how long to keep closed connections in memory
+	// for display in the dashboard. Default is 10 minutes. Set to 0 to disable keeping
+	// closed connections.
+	ConnRetentionDuration int64 `json:"connRetentionDuration,omitempty"`
 	// SubDomainHost specifies the domain that will be attached to sub-domains
 	// requested by the client when using Vhost proxying. For example, if this
 	// value is set to "frps.com" and the client requested the subdomain
@@ -177,6 +193,10 @@ type ServerTransportConfig struct {
 	QUIC QUICOptions `json:"quic,omitempty"`
 	// TLS specifies TLS settings for the connection from the client.
 	TLS TLSServerConfig `json:"tls,omitempty"`
+	// ProxyProtocol toggles reading PROXY protocol headers on the bind listener.
+	// Enable this when frps is behind a Layer 4 proxy (e.g., Nginx stream, HAProxy)
+	// that sends PROXY protocol headers. Disabled by default.
+	ProxyProtocol bool `json:"proxyProtocol,omitempty"`
 }
 
 func (c *ServerTransportConfig) Complete() {

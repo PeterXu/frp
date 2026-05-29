@@ -1,0 +1,9 @@
+# frpc configuration for SOCKS5 relay testing
+serverAddr = "127.0.0.1"
+serverPort = 17000
+auth.token = "test"
+group = "testgroup"
+
+[[proxies]]
+name = "relay-test"
+type = "socks5_relay"
