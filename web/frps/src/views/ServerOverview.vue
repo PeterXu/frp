@@ -131,6 +131,14 @@
           <span class="config-label">TCPMux Port</span>
           <span class="config-value">{{ data.tcpmuxHTTPConnectPort }}</span>
         </div>
+        <div class="config-item" v-if="data.socks5ProxyPort != 0">
+          <span class="config-label">SOCKS5 Proxy Port</span>
+          <span class="config-value">{{ data.socks5ProxyPort }}</span>
+        </div>
+        <div class="config-item" v-if="data.httpConnectProxyPort != 0">
+          <span class="config-label">HTTP CONNECT Proxy Port</span>
+          <span class="config-value">{{ data.httpConnectProxyPort }}</span>
+        </div>
         <div class="config-item" v-if="data.subdomainHost != ''">
           <span class="config-label">Subdomain Host</span>
           <span class="config-value">{{ data.subdomainHost }}</span>
@@ -176,6 +184,8 @@ const data = ref({
   vhostHTTPPort: 0,
   vhostHTTPSPort: 0,
   tcpmuxHTTPConnectPort: 0,
+  socks5ProxyPort: 0,
+  httpConnectProxyPort: 0,
   subdomainHost: '',
   maxPoolCount: 0,
   maxPortsPerClient: '',
@@ -209,6 +219,8 @@ const fetchData = async () => {
     data.value.vhostHTTPPort = json.vhostHTTPPort
     data.value.vhostHTTPSPort = json.vhostHTTPSPort
     data.value.tcpmuxHTTPConnectPort = json.tcpmuxHTTPConnectPort
+    data.value.socks5ProxyPort = json.socks5ProxyPort || 0
+    data.value.httpConnectProxyPort = json.httpConnectProxyPort || 0
     data.value.subdomainHost = json.subdomainHost
     data.value.maxPoolCount = json.maxPoolCount
     data.value.maxPortsPerClient = String(json.maxPortsPerClient)
