@@ -122,6 +122,8 @@ func ValidateProxyConfigurerForClient(c v1.ProxyConfigurer) error {
 		return validateXTCPProxyConfigForClient(v)
 	case *v1.SUDPProxyConfig:
 		return validateSUDPProxyConfigForClient(v)
+	case *v1.Socks5RelayProxyConfig:
+		return validateSocks5RelayProxyConfigForClient(v)
 	}
 	return errors.New("unknown proxy config type")
 }
@@ -165,6 +167,13 @@ func validateSUDPProxyConfigForClient(c *v1.SUDPProxyConfig) error {
 	return nil
 }
 
+func validateSocks5RelayProxyConfigForClient(c *v1.Socks5RelayProxyConfig) error {
+	if c.MaxConcurrent < 0 {
+		return fmt.Errorf("maxConcurrent must be >= 0, got %d", c.MaxConcurrent)
+	}
+	return nil
+}
+
 func ValidateProxyConfigurerForServer(c v1.ProxyConfigurer, s *v1.ServerConfig) error {
 	base := c.GetBaseConfig()
 	if err := validateProxyBaseConfigForServer(base); err != nil {
@@ -188,6 +197,8 @@ func ValidateProxyConfigurerForServer(c v1.ProxyConfigurer, s *v1.ServerConfig) 
 		return validateXTCPProxyConfigForServer(v, s)
 	case *v1.SUDPProxyConfig:
 		return validateSUDPProxyConfigForServer(v, s)
+	case *v1.Socks5RelayProxyConfig:
+		return validateSocks5RelayProxyConfigForServer(v, s)
 	default:
 		return errors.New("unknown proxy config type")
 	}
@@ -235,6 +246,13 @@ func validateXTCPProxyConfigForServer(c *v1.XTCPProxyConfig, s *v1.ServerConfig)
 }
 
 func validateSUDPProxyConfigForServer(c *v1.SUDPProxyConfig, s *v1.ServerConfig) error {
+	return nil
+}
+
+func validateSocks5RelayProxyConfigForServer(c *v1.Socks5RelayProxyConfig, s *v1.ServerConfig) error {
+	if s.Socks5ProxyPort == 0 && s.HTTPConnectProxyPort == 0 {
+		return fmt.Errorf("type [socks5_relay] requires socks5ProxyPort or httpConnectProxyPort to be set on server")
+	}
 	return nil
 }
 

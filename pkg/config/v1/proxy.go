@@ -228,25 +228,27 @@ type ProxyConfigurer interface {
 type ProxyType string
 
 const (
-	ProxyTypeTCP    ProxyType = "tcp"
-	ProxyTypeUDP    ProxyType = "udp"
-	ProxyTypeTCPMUX ProxyType = "tcpmux"
-	ProxyTypeHTTP   ProxyType = "http"
-	ProxyTypeHTTPS  ProxyType = "https"
-	ProxyTypeSTCP   ProxyType = "stcp"
-	ProxyTypeXTCP   ProxyType = "xtcp"
-	ProxyTypeSUDP   ProxyType = "sudp"
+	ProxyTypeTCP         ProxyType = "tcp"
+	ProxyTypeUDP         ProxyType = "udp"
+	ProxyTypeTCPMUX      ProxyType = "tcpmux"
+	ProxyTypeHTTP        ProxyType = "http"
+	ProxyTypeHTTPS       ProxyType = "https"
+	ProxyTypeSTCP        ProxyType = "stcp"
+	ProxyTypeXTCP        ProxyType = "xtcp"
+	ProxyTypeSUDP        ProxyType = "sudp"
+	ProxyTypeSocks5Relay ProxyType = "socks5_relay"
 )
 
 var proxyConfigTypeMap = map[ProxyType]reflect.Type{
-	ProxyTypeTCP:    reflect.TypeFor[TCPProxyConfig](),
-	ProxyTypeUDP:    reflect.TypeFor[UDPProxyConfig](),
-	ProxyTypeHTTP:   reflect.TypeFor[HTTPProxyConfig](),
-	ProxyTypeHTTPS:  reflect.TypeFor[HTTPSProxyConfig](),
-	ProxyTypeTCPMUX: reflect.TypeFor[TCPMuxProxyConfig](),
-	ProxyTypeSTCP:   reflect.TypeFor[STCPProxyConfig](),
-	ProxyTypeXTCP:   reflect.TypeFor[XTCPProxyConfig](),
-	ProxyTypeSUDP:   reflect.TypeFor[SUDPProxyConfig](),
+	ProxyTypeTCP:         reflect.TypeFor[TCPProxyConfig](),
+	ProxyTypeUDP:         reflect.TypeFor[UDPProxyConfig](),
+	ProxyTypeHTTP:        reflect.TypeFor[HTTPProxyConfig](),
+	ProxyTypeHTTPS:       reflect.TypeFor[HTTPSProxyConfig](),
+	ProxyTypeTCPMUX:      reflect.TypeFor[TCPMuxProxyConfig](),
+	ProxyTypeSTCP:        reflect.TypeFor[STCPProxyConfig](),
+	ProxyTypeXTCP:        reflect.TypeFor[XTCPProxyConfig](),
+	ProxyTypeSUDP:        reflect.TypeFor[SUDPProxyConfig](),
+	ProxyTypeSocks5Relay: reflect.TypeFor[Socks5RelayProxyConfig](),
 }
 
 func NewProxyConfigurerByType(proxyType ProxyType) ProxyConfigurer {
@@ -530,5 +532,33 @@ func (c *SUDPProxyConfig) Clone() ProxyConfigurer {
 	out := *c
 	out.ProxyBaseConfig = c.ProxyBaseConfig.Clone()
 	out.AllowUsers = slices.Clone(c.AllowUsers)
+	return &out
+}
+
+var _ ProxyConfigurer = &Socks5RelayProxyConfig{}
+
+type Socks5RelayProxyConfig struct {
+	ProxyBaseConfig
+
+	OutboundProxy string `json:"outboundProxy,omitempty"`
+	// MaxConcurrent limits the number of concurrent relay connections using a token pool.
+	// When limit is reached, new requests will wait (block) until a token becomes available.
+	// Default is 0 (unlimited). Recommended range: 3-10 for typical usage.
+	MaxConcurrent int `json:"maxConcurrent,omitempty"`
+}
+
+func (c *Socks5RelayProxyConfig) MarshalToMsg(m *msg.NewProxy) {
+	c.ProxyBaseConfig.MarshalToMsg(m)
+	m.OutboundProxy = c.OutboundProxy
+}
+
+func (c *Socks5RelayProxyConfig) UnmarshalFromMsg(m *msg.NewProxy) {
+	c.ProxyBaseConfig.UnmarshalFromMsg(m)
+	c.OutboundProxy = m.OutboundProxy
+}
+
+func (c *Socks5RelayProxyConfig) Clone() ProxyConfigurer {
+	out := *c
+	out.ProxyBaseConfig = c.ProxyBaseConfig.Clone()
 	return &out
 }

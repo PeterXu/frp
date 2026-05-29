@@ -5,6 +5,15 @@ NOWEB_TAG = $(shell [ ! -d web/frps/dist ] || [ ! -d web/frpc/dist ] && echo ',n
 FRP_COMPAT_BASELINE_COUNT ?= 8
 FRP_COMPAT_FLOOR_VERSION ?= 0.61.0
 
+OS ?= $(shell go env GOOS)
+ARCH ?= $(shell go env GOARCH)
+
+DATE_PREFIX := $(shell date +%y%m%d)
+GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo 'dev')
+VERSION ?= $(DATE_PREFIX).$(GIT_VERSION)
+# Should remove -trimpath in go build
+LDFLAGS += -X github.com/fatedier/frp/pkg/util/version.version=$(VERSION)
+
 .PHONY: web frps-web frpc-web frps frpc e2e-compatibility-smoke e2e-compatibility e2e-compatibility-floor
 
 all: env fmt web build
@@ -35,10 +44,14 @@ vet:
 	go vet -tags "$(NOWEB_TAG)" ./...
 
 frps:
-	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -tags "frps$(NOWEB_TAG)" -o bin/frps ./cmd/frps
+	env CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -ldflags "$(LDFLAGS)" -tags "frps$(NOWEB_TAG)" -o bin/frps ./cmd/frps
 
 frpc:
-	env CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -tags "frpc$(NOWEB_TAG)" -o bin/frpc ./cmd/frpc
+	env CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -ldflags "$(LDFLAGS)" -tags "frpc$(NOWEB_TAG)" -o bin/frpc ./cmd/frpc
+
+docker:
+	docker compose build --build-arg VERSION=$(VERSION)
+
 
 test: gotest
 
