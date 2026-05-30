@@ -62,6 +62,7 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	subRouter.HandleFunc("/api/socks5relay/events", svr.apiSocks5RelayEvents).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/retention", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayRetention)).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/retention", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelaySetRetention)).Methods("PUT")
+	subRouter.HandleFunc("/api/reload_tls", httppkg.MakeHTTPHandlerFunc(svr.apiReloadTLS)).Methods("POST")
 
 	// view
 	subRouter.Handle("/favicon.ico", http.FileServer(helper.AssetsFS)).Methods("GET")
@@ -185,6 +186,13 @@ func (svr *Service) apiSocks5RelaySetRetention(ctx *httppkg.Context) (any, error
 
 	svr.connTracker.SetRetentionDuration(time.Duration(req.RetentionSeconds) * time.Second)
 	return map[string]int64{"retentionSeconds": req.RetentionSeconds}, nil
+}
+
+func (svr *Service) apiReloadTLS(ctx *httppkg.Context) (any, error) {
+	if err := svr.ReloadTLS(); err != nil {
+		return nil, err
+	}
+	return map[string]string{"msg": "tls reload success"}, nil
 }
 
 // apiSocks5RelayEvents is a Server-Sent Events endpoint that streams connection events.
