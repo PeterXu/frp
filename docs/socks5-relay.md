@@ -91,6 +91,30 @@ The frps dashboard includes real-time relay connection monitoring:
 | GET | `/api/socks5relay/events` | SSE stream of connection events |
 | GET | `/api/socks5relay/retention` | Get retention duration |
 | PUT | `/api/socks5relay/retention` | Set retention duration (0-3600 seconds) |
+| POST | `/api/reload_tls` | Hot-reload CRL file from disk |
+
+## TLS Client Certificate Revocation (CRL)
+
+When `transport.tls.trustedCaFile` is configured for mutual TLS, frps can also check a Certificate Revocation List to reject revoked client certificates:
+
+```toml
+transport.tls.certFile = "server.crt"
+transport.tls.keyFile = "server.key"
+transport.tls.trustedCaFile = "ca.crt"
+transport.tls.crlFile = "ca.crl"
+```
+
+The CRL file must be PEM-encoded (with `X509 CRL` PEM blocks) and signed by the same CA as `trustedCaFile`. Only the leaf (client) certificate is checked against the CRL.
+
+To reload the CRL after updating the file on disk (no restart required):
+
+```bash
+curl -X POST -u admin:admin http://127.0.0.1:7500/api/reload_tls
+```
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/reload_tls` | Hot-reload CRL file from disk |
 
 ## TLS + Nginx Stream Proxy
 
