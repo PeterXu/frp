@@ -57,5 +57,10 @@ func (v *ConfigValidator) ValidateServerConfig(c *v1.ServerConfig) (Warning, err
 			errs = AppendError(errs, fmt.Errorf("invalid http plugin ops, optional values are %v", SupportedHTTPPluginOps))
 		}
 	}
+
+	if c.Transport.TLS.CrlFile != "" && c.Transport.TLS.TrustedCaFile == "" {
+		errs = AppendError(errs, fmt.Errorf("transport.tls.crlFile requires transport.tls.trustedCaFile to be set"))
+	}
+
 	return warnings, errs
 }

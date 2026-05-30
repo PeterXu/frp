@@ -96,6 +96,10 @@ type TLSConfig struct {
 	// ServerName specifies the custom server name of tls certificate. By
 	// default, server name if same to ServerAddr.
 	ServerName string `json:"serverName,omitempty"`
+	// CrlFile specifies the path of the PEM-encoded CRL file for verifying
+	// client certificates. Only effective on frps when TrustedCaFile is set.
+	// After updating the CRL file on disk, reload via POST /api/reload_tls.
+	CrlFile string `json:"crlFile,omitempty"`
 }
 
 // NatTraversalConfig defines configuration options for NAT traversal
