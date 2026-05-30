@@ -134,7 +134,8 @@ type Service struct {
 	// Auth runtime and encryption materials
 	auth *auth.ServerAuth
 
-	tlsConfig *tls.Config
+	tlsConfig   *tls.Config
+	tlsVerifier *transport.TLSVerifier
 
 	cfg *v1.ServerConfig
 
@@ -145,10 +146,12 @@ type Service struct {
 }
 
 func NewService(cfg *v1.ServerConfig) (*Service, error) {
-	tlsConfig, err := transport.NewServerTLSConfig(
+	tlsConfig, tlsVerifier, err := transport.NewServerTLSConfigWithCRL(
 		cfg.Transport.TLS.CertFile,
 		cfg.Transport.TLS.KeyFile,
-		cfg.Transport.TLS.TrustedCaFile)
+		cfg.Transport.TLS.TrustedCaFile,
+		cfg.Transport.TLS.CrlFile,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +190,7 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		auth:              authRuntime,
 		webServer:         webServer,
 		tlsConfig:         tlsConfig,
+		tlsVerifier:       tlsVerifier,
 		cfg:               cfg,
 		ctx:               context.Background(),
 	}
@@ -719,6 +723,13 @@ func (ac *acceptedConnection) handleClientHello(conn net.Conn, wireConn *wire.Co
 	}
 	ac.cryptoContext = cryptoContext
 	return nil
+}
+
+func (svr *Service) ReloadTLS() error {
+	if svr.tlsVerifier == nil {
+		return fmt.Errorf("CRL is not configured, set transport.tls.crlFile to enable CRL reload")
+	}
+	return svr.tlsVerifier.Reload()
 }
 
 // HandleListener accepts connections from client and call handleConnection to handle them.

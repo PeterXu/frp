@@ -48,6 +48,9 @@ transport.tcpMux = true
 # transport.tls.certFile = "server.crt"
 # transport.tls.keyFile = "server.key"
 # transport.tls.trustedCaFile = "ca.crt"
+# CRL for revoking client certificates. Requires trustedCaFile.
+# After updating the CRL file on disk, reload via: POST /api/reload_tls
+# transport.tls.crlFile = "ca.crl"
 
 # This lets frps read the PROXY protocol header before the TLS handshake, 
 # so it gets the real client IP while still accepting TLS connections.
