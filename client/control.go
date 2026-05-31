@@ -17,6 +17,8 @@ package client
 import (
 	"context"
 	"net"
+	"os"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/fatedier/frp/pkg/msg"
 	"github.com/fatedier/frp/pkg/naming"
 	"github.com/fatedier/frp/pkg/transport"
+	"github.com/fatedier/frp/pkg/util/version"
 	"github.com/fatedier/frp/pkg/util/wait"
 	"github.com/fatedier/frp/pkg/util/xlog"
 	"github.com/fatedier/frp/pkg/vnet"
@@ -67,6 +70,8 @@ type Control struct {
 
 	// of time.Time, last time got the Pong message
 	lastPong atomic.Value
+
+	exitInProgress atomic.Bool
 
 	// The role of msgTransporter is similar to HTTP2.
 	// It allows multiple messages to be sent simultaneously on the same control connection.
@@ -225,6 +230,9 @@ func (ctl *Control) registerMsgHandlers() {
 	ctl.msgDispatcher.RegisterHandler(&msg.NewProxyResp{}, ctl.handleNewProxyResp)
 	ctl.msgDispatcher.RegisterHandler(&msg.NatHoleResp{}, ctl.handleNatHoleResp)
 	ctl.msgDispatcher.RegisterHandler(&msg.Pong{}, ctl.handlePong)
+	ctl.msgDispatcher.RegisterHandler(&msg.GetClientConfig{}, msg.AsyncHandler(ctl.handleGetClientConfig))
+	ctl.msgDispatcher.RegisterHandler(&msg.ReqClientMetrics{}, msg.AsyncHandler(ctl.handleReqClientMetrics))
+	ctl.msgDispatcher.RegisterHandler(&msg.ReqClientExit{}, msg.AsyncHandler(ctl.handleReqClientExit))
 }
 
 // heartbeatWorker sends heartbeat to server and check heartbeat timeout.
@@ -288,4 +296,103 @@ func (ctl *Control) UpdateAllConfigurer(proxyCfgs []v1.ProxyConfigurer, visitorC
 	ctl.vm.UpdateAll(visitorCfgs)
 	ctl.pm.UpdateAll(proxyCfgs)
 	return nil
+}
+
+func (ctl *Control) handleGetClientConfig(m msg.Message) {
+	inMsg := m.(*msg.GetClientConfig)
+	xl := ctl.xl
+	xl.Debugf("[remote-config] received GetClientConfig request from server, txID: %s", inMsg.TransactionID)
+	common := ctl.sessionCtx.Common
+
+	resp := &msg.GetClientConfigResp{
+		TransactionID: inMsg.TransactionID,
+		User:          common.User,
+		ClientID:      common.ClientID,
+		Group:         common.Group,
+		ServerAddr:    common.ServerAddr,
+		ServerPort:    common.ServerPort,
+		Version:       version.Full(),
+		Protocol:      common.Transport.Protocol,
+		WireProtocol:  common.Transport.WireProtocol,
+
+		PoolCount:               common.Transport.PoolCount,
+		HeartbeatInterval:       common.Transport.HeartbeatInterval,
+		HeartbeatTimeout:        common.Transport.HeartbeatTimeout,
+		DialServerTimeout:       common.Transport.DialServerTimeout,
+		DialServerKeepAlive:     common.Transport.DialServerKeepAlive,
+		TCPMux:                  common.Transport.TCPMux,
+		TCPMuxKeepaliveInterval: common.Transport.TCPMuxKeepaliveInterval,
+		TLSEnabled:              common.Transport.TLS.Enable,
+		ProxyURL:                common.Transport.ProxyURL,
+
+		LogTo:      common.Log.To,
+		LogLevel:   common.Log.Level,
+		LogMaxDays: common.Log.MaxDays,
+
+		DNSServer:     common.DNSServer,
+		Start:         common.Start,
+		UDPPacketSize: common.UDPPacketSize,
+		Metadatas:     common.Metadatas,
+		WebServerAddr: common.WebServer.Addr,
+		WebServerPort: common.WebServer.Port,
+		LoginFailExit: common.LoginFailExit,
+	}
+
+	for _, s := range ctl.pm.GetAllProxyStatus() {
+		resp.Proxies = append(resp.Proxies, msg.GetClientConfigProxy{
+			Name:   s.Name,
+			Type:   s.Type,
+			Config: s.Cfg,
+		})
+	}
+
+	xl.Debugf("[remote-config] sending GetClientConfigResp to server, txID: %s", inMsg.TransactionID)
+	_ = ctl.msgDispatcher.Send(resp)
+}
+
+func (ctl *Control) handleReqClientMetrics(m msg.Message) {
+	inMsg := m.(*msg.ReqClientMetrics)
+	xl := ctl.xl
+	xl.Debugf("received ReqClientMetrics request from server, txID: %s", inMsg.TransactionID)
+
+	var mstats runtime.MemStats
+	runtime.ReadMemStats(&mstats)
+
+	resp := &msg.ClientMetricsResp{
+		TransactionID: inMsg.TransactionID,
+		CPUUsage:      getCPUSeconds(),
+		MemAlloc:      mstats.Alloc,
+		MemSys:        mstats.Sys,
+		NumGC:         mstats.NumGC,
+		NumGoroutine:  runtime.NumGoroutine(),
+	}
+	_ = ctl.msgDispatcher.Send(resp)
+}
+
+func (ctl *Control) handleReqClientExit(m msg.Message) {
+	inMsg := m.(*msg.ReqClientExit)
+	xl := ctl.xl
+
+	if !ctl.exitInProgress.CompareAndSwap(false, true) {
+		xl.Warnf("exit already in progress, ignoring duplicate request, txID: %s", inMsg.TransactionID)
+		_ = ctl.msgDispatcher.Send(&msg.ClientExitResp{
+			TransactionID: inMsg.TransactionID,
+		})
+		return
+	}
+
+	xl.Infof("received exit request from server, txID: %s", inMsg.TransactionID)
+
+	_ = ctl.msgDispatcher.Send(&msg.ClientExitResp{
+		TransactionID: inMsg.TransactionID,
+	})
+	// Give the async send loop time to flush the response before we close
+	// the session.
+	time.Sleep(100 * time.Millisecond)
+
+	// Close the control connection to trigger worker() cleanup of proxies
+	// and visitors, avoiding a race with GracefulClose.
+	ctl.closeSession()
+	<-ctl.doneCh
+	os.Exit(0)
 }

@@ -283,6 +283,22 @@ func (ctl *Control) WaitClosed() {
 	<-ctl.doneCh
 }
 
+func (ctl *Control) MsgTransporter() transport.MessageTransporter {
+	return ctl.msgTransporter
+}
+
+// SupportsFeature reports whether the connected frpc advertised support for
+// the given feature in its Login message. Older frpc versions that predate
+// feature negotiation will report false for all features.
+func (ctl *Control) SupportsFeature(feature string) bool {
+	for _, f := range ctl.sessionCtx.LoginMsg.SupportedFeatures {
+		if f == feature {
+			return true
+		}
+	}
+	return false
+}
+
 func (ctl *Control) loginUserInfo() plugin.UserInfo {
 	return plugin.UserInfo{
 		User:  ctl.sessionCtx.LoginMsg.User,
@@ -342,6 +358,30 @@ func (ctl *Control) registerMsgHandlers() {
 	ctl.msgDispatcher.RegisterHandler(&msg.NatHoleClient{}, msg.AsyncHandler(ctl.handleNatHoleClient))
 	ctl.msgDispatcher.RegisterHandler(&msg.NatHoleReport{}, msg.AsyncHandler(ctl.handleNatHoleReport))
 	ctl.msgDispatcher.RegisterHandler(&msg.CloseProxy{}, ctl.handleCloseProxy)
+
+	// Response dispatchers — route responses to waiting Do() calls.
+	ctl.msgDispatcher.RegisterHandler(&msg.GetClientConfigResp{}, ctl.handleGetClientConfigResp)
+	ctl.msgDispatcher.RegisterHandler(&msg.ClientMetricsResp{}, ctl.handleClientMetricsResp)
+	ctl.msgDispatcher.RegisterHandler(&msg.ClientExitResp{}, ctl.handleClientExitResp)
+}
+
+func (ctl *Control) handleGetClientConfigResp(m msg.Message) {
+	resp := m.(*msg.GetClientConfigResp)
+	xl := ctl.xl
+	xl.Debugf("[remote-config] received GetClientConfigResp from client [%s], txID: %s", ctl.runID, resp.TransactionID)
+	ctl.msgTransporter.DispatchWithType(resp, msg.TypeNameGetClientConfigResp, resp.TransactionID)
+}
+
+func (ctl *Control) handleClientMetricsResp(m msg.Message) {
+	resp := m.(*msg.ClientMetricsResp)
+	xl := ctl.xl
+	xl.Debugf("received ClientMetricsResp from client [%s], txID: %s", ctl.runID, resp.TransactionID)
+	ctl.msgTransporter.DispatchWithType(resp, msg.TypeNameClientMetricsResp, resp.TransactionID)
+}
+
+func (ctl *Control) handleClientExitResp(m msg.Message) {
+	resp := m.(*msg.ClientExitResp)
+	ctl.msgTransporter.DispatchWithType(resp, msg.TypeNameClientExitResp, resp.TransactionID)
 }
 
 func (ctl *Control) handleNewProxy(m msg.Message) {

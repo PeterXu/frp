@@ -25,8 +25,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/fatedier/frp/pkg/msg"
 	httppkg "github.com/fatedier/frp/pkg/util/http"
 	netpkg "github.com/fatedier/frp/pkg/util/net"
+	pkgutil "github.com/fatedier/frp/pkg/util/util"
 	adminapi "github.com/fatedier/frp/server/http"
 	"github.com/fatedier/frp/server/http/model"
 	"github.com/fatedier/frp/server/socks5proxy"
@@ -68,6 +70,11 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	subRouter.HandleFunc("/api/socks5relay/group/{group}/enable", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayGroupEnable)).Methods("PUT")
 	subRouter.HandleFunc("/api/socks5relay/client/{key}/disable", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayClientDisable)).Methods("PUT")
 	subRouter.HandleFunc("/api/socks5relay/client/{key}/enable", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayClientEnable)).Methods("PUT")
+
+	// client config view routes
+	subRouter.HandleFunc("/api/clients/{key}/config", httppkg.MakeHTTPHandlerFunc(svr.apiClientGetConfig)).Methods("GET")
+	subRouter.HandleFunc("/api/clients/{key}/metrics", httppkg.MakeHTTPHandlerFunc(svr.apiClientGetMetrics)).Methods("GET")
+	subRouter.HandleFunc("/api/clients/{key}/exit", httppkg.MakeHTTPHandlerFunc(svr.apiClientExit)).Methods("PUT")
 
 	// view
 	subRouter.Handle("/favicon.ico", http.FileServer(helper.AssetsFS)).Methods("GET")
@@ -323,4 +330,116 @@ func (svr *Service) apiSocks5RelayClientEnable(ctx *httppkg.Context) (any, error
 		Key:      key,
 		Disabled: false,
 	}, nil
+}
+
+func newTransactionID() string {
+	id, _ := pkgutil.RandID()
+	return fmt.Sprintf("%d%s", time.Now().Unix(), id)
+}
+
+func (svr *Service) lookupClientControl(key string) (*Control, error) {
+	info, ok := svr.clientRegistry.GetByKey(key)
+	if !ok {
+		return nil, httppkg.NewError(http.StatusNotFound, fmt.Sprintf("client %s not found", key))
+	}
+	if !info.Online {
+		return nil, httppkg.NewError(http.StatusNotFound, fmt.Sprintf("client %s is offline", key))
+	}
+	ctl, ok := svr.ctlManager.GetByID(info.RunID)
+	if !ok {
+		return nil, httppkg.NewError(http.StatusNotFound, fmt.Sprintf("client %s control not found", key))
+	}
+	return ctl, nil
+}
+
+func (svr *Service) apiClientGetConfig(ctx *httppkg.Context) (any, error) {
+	key := ctx.Param("key")
+	if key == "" {
+		return nil, fmt.Errorf("missing client key")
+	}
+
+	ctl, err := svr.lookupClientControl(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ctl.SupportsFeature(msg.FeatureConfig) {
+		return nil, httppkg.NewError(http.StatusBadRequest, "client version does not support remote config")
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx.Req.Context(), 10*time.Second)
+	defer cancel()
+
+	txID := newTransactionID()
+	ctl.xl.Debugf("[remote-config] sending GetClientConfig request to client [%s], txID: %s", ctl.runID, txID)
+	resp, err := ctl.MsgTransporter().Do(timeoutCtx, &msg.GetClientConfig{TransactionID: txID}, txID, msg.TypeNameGetClientConfigResp)
+	if err != nil {
+		ctl.xl.Errorf("[remote-config] GetClientConfig request to client [%s] failed, txID: %s: %v", ctl.runID, txID, err)
+		return nil, httppkg.NewError(http.StatusGatewayTimeout, fmt.Sprintf("timeout waiting for client response: %v", err))
+	}
+	ctl.xl.Debugf("[remote-config] GetClientConfig request to client [%s] succeeded, txID: %s", ctl.runID, txID)
+	r := resp.(*msg.GetClientConfigResp)
+	r.TransactionID = ""
+	return r, nil
+}
+
+func (svr *Service) apiClientGetMetrics(ctx *httppkg.Context) (any, error) {
+	key := ctx.Param("key")
+	if key == "" {
+		return nil, fmt.Errorf("missing client key")
+	}
+
+	ctl, err := svr.lookupClientControl(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ctl.SupportsFeature(msg.FeatureMetrics) {
+		return nil, httppkg.NewError(http.StatusBadRequest, "client version does not support metrics")
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx.Req.Context(), 3*time.Second)
+	defer cancel()
+
+	txID := newTransactionID()
+	ctl.xl.Debugf("sending ReqClientMetrics request to client [%s], txID: %s", ctl.runID, txID)
+	resp, err := ctl.MsgTransporter().Do(timeoutCtx, &msg.ReqClientMetrics{TransactionID: txID}, txID, msg.TypeNameClientMetricsResp)
+	if err != nil {
+		ctl.xl.Errorf("ReqClientMetrics request to client [%s] failed, txID: %s: %v", ctl.runID, txID, err)
+		return nil, httppkg.NewError(http.StatusGatewayTimeout, fmt.Sprintf("timeout waiting for client response: %v", err))
+	}
+	ctl.xl.Debugf("ReqClientMetrics request to client [%s] succeeded, txID: %s", ctl.runID, txID)
+	r := resp.(*msg.ClientMetricsResp)
+	r.TransactionID = ""
+	return r, nil
+}
+
+func (svr *Service) apiClientExit(ctx *httppkg.Context) (any, error) {
+	key := ctx.Param("key")
+	if key == "" {
+		return nil, fmt.Errorf("missing client key")
+	}
+
+	ctl, err := svr.lookupClientControl(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ctl.SupportsFeature(msg.FeatureExit) {
+		return nil, httppkg.NewError(http.StatusBadRequest, "client version does not support remote exit")
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx.Req.Context(), 3*time.Second)
+	defer cancel()
+
+	txID := newTransactionID()
+	ctl.xl.Infof("sending exit request to client [%s], txID: %s", ctl.runID, txID)
+	_, err = ctl.MsgTransporter().Do(timeoutCtx, &msg.ReqClientExit{TransactionID: txID}, txID, msg.TypeNameClientExitResp)
+	if err != nil {
+		ctl.xl.Errorf("exit request to client [%s] failed, txID: %s: %v", ctl.runID, txID, err)
+		return nil, httppkg.NewError(http.StatusGatewayTimeout, fmt.Sprintf("timeout waiting for client response: %v", err))
+	}
+
+	ctl.xl.Infof("client [%s] acknowledged exit request", ctl.runID)
+	return map[string]string{"status": "ok"}, nil
 }
