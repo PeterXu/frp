@@ -89,8 +89,8 @@ type Service struct {
 	kcpListener net.Listener
 
 	// Accept connections using quic
-	quicListener   *quic.Listener
-	quicTransport  *quic.Transport // only set when using statelessResetKey
+	quicListener  *quic.Listener
+	quicTransport *quic.Transport // only set when using statelessResetKey
 
 	// Accept connections using websocket
 	websocketListener net.Listener
@@ -899,8 +899,8 @@ func (svr *Service) RegisterControl(
 	xl := xlog.FromContextSafe(ctx)
 	xl.AppendPrefix(loginMsg.RunID)
 	ctx = xlog.NewContext(ctx, xl)
-	xl.Infof("client login info: ip [%s] version [%s] hostname [%s] os [%s] arch [%s]",
-		ctlConn.RemoteAddr().String(), loginMsg.Version, loginMsg.Hostname, loginMsg.Os, loginMsg.Arch)
+	xl.Infof("client login info: ip [%s] version [%s] hostname [%s] os [%s] arch [%s] wireProtocol [%s]",
+		ctlConn.RemoteAddr().String(), loginMsg.Version, loginMsg.Hostname, loginMsg.Os, loginMsg.Arch, wireProtocol)
 
 	// Check auth.
 	authVerifier := svr.auth.Verifier

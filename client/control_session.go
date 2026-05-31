@@ -126,6 +126,12 @@ func (d *controlSessionDialer) buildLoginMsg(previousRunID string) (*msg.Login, 
 		loginMsg.ClientSpec = *d.clientSpec
 	}
 
+	loginMsg.SupportedFeatures = []string{
+		msg.FeatureConfig,
+		msg.FeatureMetrics,
+		msg.FeatureExit,
+	}
+
 	if err := d.auth.Setter.SetLogin(loginMsg); err != nil {
 		return nil, err
 	}

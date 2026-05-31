@@ -42,6 +42,15 @@
               </div>
             </div>
             <div class="header-right">
+              <el-button
+                v-if="client.online"
+                size="small"
+                type="danger"
+                :loading="exiting"
+                @click="handleExitClient"
+              >
+                Exit client
+              </el-button>
               <span
                 class="status-badge"
                 :class="client.online ? 'online' : 'offline'"
@@ -80,6 +89,218 @@
           </div>
         </div>
 
+        <!-- Client Config Card -->
+        <div v-if="client.online" class="config-card">
+          <div class="config-header">
+            <div class="config-title">
+              <h2>Client Config</h2>
+            </div>
+            <div class="resources-actions">
+              <el-button
+                v-if="!showConfig"
+                size="small"
+                type="primary"
+                :loading="loadingConfig"
+                @click="fetchAllConfig"
+              >
+                Load config
+              </el-button>
+              <el-button
+                v-else
+                size="small"
+                @click="hideConfig"
+              >
+                Close
+              </el-button>
+            </div>
+          </div>
+          <div v-if="showConfig" v-loading="loadingConfig" class="config-body">
+            <div v-if="clientConfig" class="config-columns">
+              <div class="config-column">
+                <div class="config-item">
+                  <span class="config-label">Version</span>
+                  <span class="config-value">{{ clientConfig.version || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Protocol</span>
+                  <span class="config-value">{{ clientConfig.protocol || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Wire Protocol</span>
+                  <span class="config-value">{{ clientConfig.wire_protocol || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">User</span>
+                  <span class="config-value">{{ clientConfig.user || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Client ID</span>
+                  <span class="config-value">{{ clientConfig.client_id || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Group</span>
+                  <span class="config-value">{{ clientConfig.group || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Server</span>
+                  <span class="config-value">
+                    {{ clientConfig.server_addr || '-' }}:{{ clientConfig.server_port || '-' }}
+                  </span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">TLS</span>
+                  <span class="config-value">{{ boolLabel(clientConfig.tls_enabled) }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">TCP Mux</span>
+                  <span class="config-value">{{ boolLabel(clientConfig.tcp_mux) }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Proxy URL</span>
+                  <span class="config-value">{{ clientConfig.proxy_url || '-' }}</span>
+                </div>
+              </div>
+              <div class="config-column">
+                <div class="config-item">
+                  <span class="config-label">Pool Count</span>
+                  <span class="config-value">{{ clientConfig.pool_count }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Heartbeat Interval</span>
+                  <span class="config-value">{{ clientConfig.heartbeat_interval }}s</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Heartbeat Timeout</span>
+                  <span class="config-value">{{ clientConfig.heartbeat_timeout }}s</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Dial Timeout</span>
+                  <span class="config-value">{{ clientConfig.dial_server_timeout }}s</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Dial Keepalive</span>
+                  <span class="config-value">{{ clientConfig.dial_server_keepalive }}s</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">UDP Packet Size</span>
+                  <span class="config-value">{{ clientConfig.udp_packet_size }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">DNS Server</span>
+                  <span class="config-value">{{ clientConfig.dns_server || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Log</span>
+                  <span class="config-value">{{ clientConfig.log_level }}{{ clientConfig.log_to && clientConfig.log_to !== 'console' ? ' → ' + clientConfig.log_to : '' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Web Server</span>
+                  <span class="config-value">{{ clientConfig.web_server_port ? clientConfig.web_server_addr + ':' + clientConfig.web_server_port : '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Login Fail Exit</span>
+                  <span class="config-value">{{ boolLabel(clientConfig.login_fail_exit) }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="clientConfig?.metadatas && Object.keys(clientConfig.metadatas).length" class="config-section">
+              <div class="config-section-title">Metadatas</div>
+              <div class="config-columns">
+                <div class="config-column">
+                  <div v-for="(val, key) in clientConfig.metadatas" :key="key" class="config-item">
+                    <span class="config-label">{{ key }}</span>
+                    <span class="config-value">{{ val }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="clientConfig?.start && clientConfig.start.length" class="config-section">
+              <div class="config-section-title">Start</div>
+              <div class="config-tags">
+                <el-tag v-for="name in clientConfig.start" :key="name" size="small" class="config-tag">{{ name }}</el-tag>
+              </div>
+            </div>
+            <div v-if="proxyConfigs.length" class="config-section">
+              <div class="config-section-title">Proxies</div>
+              <div class="proxy-configs-list">
+                <div v-for="pc in proxyConfigs" :key="pc.name" class="proxy-config-block">
+                  <div class="proxy-config-header">
+                    <span class="proxy-config-name">{{ pc.name }}</span>
+                    <el-tag size="small" type="info">{{ pc.type }}</el-tag>
+                  </div>
+                  <div class="config-columns">
+                    <div class="config-column">
+                      <div v-for="item in pc.fields" :key="item.key" class="config-item">
+                        <span class="config-label">{{ item.key }}</span>
+                        <span class="config-value" :title="item.value">{{ item.value }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resources Card -->
+        <div v-if="client?.online" class="resources-card">
+          <div class="config-header">
+            <div class="config-title">
+              <h2>Resources</h2>
+            </div>
+            <div class="resources-actions">
+              <el-tag v-if="pollingActive" size="small" type="warning">Polling 5s</el-tag>
+              <el-button
+                v-if="!showMetrics"
+                size="small"
+                type="primary"
+                :loading="loadingMetrics"
+                @click="fetchMetrics"
+              >
+                Load metrics
+              </el-button>
+              <el-button
+                v-else
+                size="small"
+                @click="stopPolling"
+              >
+                Stop
+              </el-button>
+            </div>
+          </div>
+          <div v-if="showMetrics" class="config-body">
+            <div v-loading="loadingMetrics" class="config-columns">
+              <div class="config-column">
+                <div class="config-item">
+                  <span class="config-label">Allocated Memory</span>
+                  <span class="config-value">{{ formatBytes(metricsData?.mem_alloc) }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">System Memory</span>
+                  <span class="config-value">{{ formatBytes(metricsData?.mem_sys) }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">GC Cycles</span>
+                  <span class="config-value">{{ metricsData?.num_gc ?? '-' }}</span>
+                </div>
+              </div>
+              <div class="config-column">
+                <div class="config-item">
+                  <span class="config-label">Goroutines</span>
+                  <span class="config-value">{{ metricsData?.num_goroutine ?? '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">CPU Time</span>
+                  <span class="config-value">{{ formatCPUTime(metricsData?.cpu_usage) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="metricsError" class="metrics-error">
+            {{ metricsError }}
+          </div>
+        </div>
+
         <!-- Proxies Card -->
         <div class="proxies-card">
           <div class="proxies-header">
@@ -101,12 +322,13 @@
               <span>Loading...</span>
             </div>
             <div v-else-if="filteredProxies.length > 0" class="proxies-list">
-              <ProxyCard
+              <div
                 v-for="proxy in filteredProxies"
                 :key="proxy.name"
-                :proxy="proxy"
-                show-type
-              />
+                class="proxy-item"
+              >
+                <ProxyCard :proxy="proxy" show-type />
+              </div>
             </div>
             <div v-else-if="clientProxies.length > 0" class="empty-state">
               <p>No proxies match "{{ proxySearch }}"</p>
@@ -130,12 +352,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Loading, Search } from '@element-plus/icons-vue'
 import { Client } from '../utils/client'
-import { getClient } from '../api/client'
+import { getClient, getClientConfig, getClientMetrics, exitClient } from '../api/client'
 import { getProxiesByType } from '../api/proxy'
 import {
   BaseProxy,
@@ -146,14 +368,21 @@ import {
   TCPMuxProxy,
   STCPProxy,
   SUDPProxy,
+  Socks5RelayProxy,
 } from '../utils/proxy'
 import { getServerInfo } from '../api/server'
 import ProxyCard from '../components/ProxyCard.vue'
+import type { ClientMetricsData } from '../types/client'
 
 const route = useRoute()
 const router = useRouter()
 const client = ref<Client | null>(null)
 const loading = ref(true)
+
+const boolLabel = (val: boolean | null | undefined) => {
+  if (val === null || val === undefined) return '-'
+  return val ? 'On' : 'Off'
+}
 
 const goBack = () => {
   if (window.history.length > 1) {
@@ -218,9 +447,128 @@ const fetchClient = async () => {
   }
 }
 
+// Config state
+const clientConfig = ref<any>(null)
+const loadingConfig = ref(false)
+const showConfig = ref(false)
+
+const proxyConfigs = computed(() => {
+  if (!clientConfig.value?.proxies) return []
+  return clientConfig.value.proxies.map((p: any) => ({
+    name: p.name,
+    type: p.type,
+    fields: Object.entries(p.config || {}).map(([key, val]) => ({
+      key,
+      value: typeof val === 'object' ? JSON.stringify(val) : String(val ?? '-'),
+    })),
+  }))
+})
+
+const fetchAllConfig = async () => {
+  if (!client.value?.online) return
+  loadingConfig.value = true
+  try {
+    clientConfig.value = await getClientConfig(route.params.key as string)
+    showConfig.value = true
+  } catch (error: any) {
+    ElMessage.error('Failed to fetch config: ' + error.message)
+  } finally {
+    loadingConfig.value = false
+  }
+}
+
+// Resource metrics state
+const metricsData = ref<ClientMetricsData | null>(null)
+const loadingMetrics = ref(false)
+const showMetrics = ref(false)
+const pollingActive = ref(false)
+const metricsError = ref('')
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const formatBytes = (bytes: number | undefined): string => {
+  if (bytes === undefined || bytes === null) return '-'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+}
+
+const formatCPUTime = (seconds: number | undefined): string => {
+  if (seconds === undefined || seconds === null) return '-'
+  if (seconds < 60) return seconds.toFixed(1) + 's'
+  if (seconds < 3600) return (seconds / 60).toFixed(1) + 'm'
+  return (seconds / 3600).toFixed(1) + 'h'
+}
+
+const fetchMetrics = async () => {
+  if (!client.value?.online) return
+  if (loadingMetrics.value) return
+  loadingMetrics.value = true
+  metricsError.value = ''
+  try {
+    const data = await getClientMetrics(route.params.key as string)
+    metricsData.value = data
+    showMetrics.value = true
+    if (!pollingActive.value) {
+      startPolling()
+    }
+  } catch (error: any) {
+    metricsError.value = 'Failed to fetch metrics: ' + (error.message || error)
+    stopPolling()
+  } finally {
+    loadingMetrics.value = false
+  }
+}
+
+const startPolling = () => {
+  stopPolling()
+  pollingActive.value = true
+  pollTimer = setInterval(fetchMetrics, 5000)
+}
+
+const stopPolling = () => {
+  pollingActive.value = false
+  showMetrics.value = false
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+// Remote exit state
+const exiting = ref(false)
+
+const handleExitClient = async () => {
+  try {
+    await ElMessageBox.confirm(
+      'This will command the client to exit gracefully. The system service manager may restart it automatically.',
+      'Exit Client',
+      { confirmButtonText: 'Exit', cancelButtonText: 'Cancel', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+
+  exiting.value = true
+  stopPolling()
+  try {
+    await exitClient(route.params.key as string)
+    ElMessage.success('Exit command sent successfully')
+    setTimeout(() => fetchClient(), 1000)
+  } catch (error: any) {
+    ElMessage.error('Failed to exit client: ' + (error.message || error))
+  } finally {
+    exiting.value = false
+  }
+}
+
+const hideConfig = () => {
+  showConfig.value = false
+}
+
 const fetchProxies = async () => {
   proxiesLoading.value = true
-  const proxyTypes = ['tcp', 'udp', 'http', 'https', 'tcpmux', 'stcp', 'sudp']
+  const proxyTypes = ['tcp', 'udp', 'http', 'https', 'tcpmux', 'stcp', 'sudp', 'socks5_relay']
   const proxies: BaseProxy[] = []
   try {
     const info = await fetchServerInfo()
@@ -261,6 +609,8 @@ const fetchProxies = async () => {
           proxies.push(...json.proxies.map((p: any) => new STCPProxy(p)))
         } else if (type === 'sudp') {
           proxies.push(...json.proxies.map((p: any) => new SUDPProxy(p)))
+        } else if (type === 'socks5_relay') {
+          proxies.push(...json.proxies.map((p: any) => new Socks5RelayProxy(p)))
         }
       } catch {
         // Ignore
@@ -274,9 +624,13 @@ const fetchProxies = async () => {
   }
 }
 
-onMounted(() => {
-  fetchClient()
+onMounted(async () => {
+  await fetchClient()
   fetchProxies()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 
@@ -327,7 +681,8 @@ onMounted(() => {
 
 /* Card Base */
 .header-card,
-.proxies-card {
+.proxies-card,
+.config-card {
   background: var(--el-bg-color);
   border: 1px solid var(--header-border);
   border-radius: 12px;
@@ -440,6 +795,116 @@ html.dark .status-badge.online {
   word-break: break-all;
 }
 
+/* Config Card */
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--header-border);
+}
+
+.config-title h2 {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.config-body {
+  padding: 16px 24px;
+  min-height: 80px;
+}
+
+.config-columns {
+  display: flex;
+  gap: 40px;
+}
+
+.config-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.config-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.config-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+  word-break: break-all;
+  text-align: right;
+}
+
+.config-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--header-border);
+}
+
+.config-section-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.config-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.config-tag {
+  font-size: 12px;
+}
+
+/* Proxy config blocks inside config card */
+.proxy-configs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.proxy-config-block {
+  padding-top: 12px;
+  border-top: 1px solid var(--header-border);
+}
+
+.proxy-config-block:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.proxy-config-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.proxy-config-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 /* Proxies Card */
 .proxies-header {
   display: flex;
@@ -489,6 +954,10 @@ html.dark .status-badge.online {
   gap: 12px;
 }
 
+.proxy-item {
+  position: relative;
+}
+
 .loading-state {
   display: flex;
   align-items: center;
@@ -527,6 +996,26 @@ html.dark .status-badge.online {
   margin: 0 0 20px;
 }
 
+/* Resources Card */
+.resources-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--header-border);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.resources-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metrics-error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--el-color-danger);
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .header-main {
@@ -536,6 +1025,11 @@ html.dark .status-badge.online {
 
   .header-right {
     align-self: flex-start;
+  }
+
+  .config-columns {
+    flex-direction: column;
+    gap: 20px;
   }
 }
 </style>
