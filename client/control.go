@@ -27,6 +27,7 @@ import (
 	"github.com/fatedier/frp/pkg/msg"
 	"github.com/fatedier/frp/pkg/naming"
 	"github.com/fatedier/frp/pkg/transport"
+	"github.com/fatedier/frp/pkg/util/version"
 	"github.com/fatedier/frp/pkg/util/wait"
 	"github.com/fatedier/frp/pkg/util/xlog"
 	"github.com/fatedier/frp/pkg/vnet"
@@ -225,6 +226,7 @@ func (ctl *Control) registerMsgHandlers() {
 	ctl.msgDispatcher.RegisterHandler(&msg.NewProxyResp{}, ctl.handleNewProxyResp)
 	ctl.msgDispatcher.RegisterHandler(&msg.NatHoleResp{}, ctl.handleNatHoleResp)
 	ctl.msgDispatcher.RegisterHandler(&msg.Pong{}, ctl.handlePong)
+	ctl.msgDispatcher.RegisterHandler(&msg.GetClientConfig{}, msg.AsyncHandler(ctl.handleGetClientConfig))
 }
 
 // heartbeatWorker sends heartbeat to server and check heartbeat timeout.
@@ -288,4 +290,47 @@ func (ctl *Control) UpdateAllConfigurer(proxyCfgs []v1.ProxyConfigurer, visitorC
 	ctl.vm.UpdateAll(visitorCfgs)
 	ctl.pm.UpdateAll(proxyCfgs)
 	return nil
+}
+
+func (ctl *Control) handleGetClientConfig(m msg.Message) {
+	inMsg := m.(*msg.GetClientConfig)
+	xl := ctl.xl
+	xl.Debugf("[remote-config] received GetClientConfig request from server, txID: %s", inMsg.TransactionID)
+	common := ctl.sessionCtx.Common
+
+	resp := &msg.GetClientConfigResp{
+		TransactionID: inMsg.TransactionID,
+		User:          common.User,
+		ClientID:      common.ClientID,
+		Group:         common.Group,
+		ServerAddr:    common.ServerAddr,
+		ServerPort:    common.ServerPort,
+		Version:       version.Full(),
+		Protocol:      common.Transport.Protocol,
+		WireProtocol:  common.Transport.WireProtocol,
+
+		PoolCount:               common.Transport.PoolCount,
+		HeartbeatInterval:       common.Transport.HeartbeatInterval,
+		HeartbeatTimeout:        common.Transport.HeartbeatTimeout,
+		DialServerTimeout:       common.Transport.DialServerTimeout,
+		DialServerKeepAlive:     common.Transport.DialServerKeepAlive,
+		TCPMux:                  common.Transport.TCPMux,
+		TCPMuxKeepaliveInterval: common.Transport.TCPMuxKeepaliveInterval,
+		TLSEnabled:              common.Transport.TLS.Enable,
+		ProxyURL:                common.Transport.ProxyURL,
+
+		LogTo:      common.Log.To,
+		LogLevel:   common.Log.Level,
+		LogMaxDays: common.Log.MaxDays,
+
+		DNSServer:     common.DNSServer,
+		Start:         common.Start,
+		UDPPacketSize: common.UDPPacketSize,
+		Metadatas:     common.Metadatas,
+		WebServerAddr: common.WebServer.Addr,
+		WebServerPort: common.WebServer.Port,
+		LoginFailExit: common.LoginFailExit,
+	}
+	xl.Debugf("[remote-config] sending GetClientConfigResp to server, txID: %s", inMsg.TransactionID)
+	_ = ctl.msgDispatcher.Send(resp)
 }

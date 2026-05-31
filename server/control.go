@@ -283,6 +283,17 @@ func (ctl *Control) WaitClosed() {
 	<-ctl.doneCh
 }
 
+func (ctl *Control) MsgTransporter() transport.MessageTransporter {
+	return ctl.msgTransporter
+}
+
+func (ctl *Control) GetProxy(name string) (proxy.Proxy, bool) {
+	ctl.mu.RLock()
+	defer ctl.mu.RUnlock()
+	p, ok := ctl.proxies[name]
+	return p, ok
+}
+
 func (ctl *Control) loginUserInfo() plugin.UserInfo {
 	return plugin.UserInfo{
 		User:  ctl.sessionCtx.LoginMsg.User,
@@ -342,6 +353,16 @@ func (ctl *Control) registerMsgHandlers() {
 	ctl.msgDispatcher.RegisterHandler(&msg.NatHoleClient{}, msg.AsyncHandler(ctl.handleNatHoleClient))
 	ctl.msgDispatcher.RegisterHandler(&msg.NatHoleReport{}, msg.AsyncHandler(ctl.handleNatHoleReport))
 	ctl.msgDispatcher.RegisterHandler(&msg.CloseProxy{}, ctl.handleCloseProxy)
+
+	// Config response dispatchers — route responses to waiting Do() calls.
+	ctl.msgDispatcher.RegisterHandler(&msg.GetClientConfigResp{}, ctl.handleGetClientConfigResp)
+}
+
+func (ctl *Control) handleGetClientConfigResp(m msg.Message) {
+	resp := m.(*msg.GetClientConfigResp)
+	xl := ctl.xl
+	xl.Debugf("[remote-config] received GetClientConfigResp from client [%s], txID: %s", ctl.runID, resp.TransactionID)
+	ctl.msgTransporter.DispatchWithType(resp, msg.TypeNameGetClientConfigResp, resp.TransactionID)
 }
 
 func (ctl *Control) handleNewProxy(m msg.Message) {

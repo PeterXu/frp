@@ -80,6 +80,122 @@
           </div>
         </div>
 
+        <!-- Client Config Card -->
+        <div v-if="client.online && clientConfig" class="config-card">
+          <div class="config-header">
+            <div class="config-title">
+              <h2>Client Config</h2>
+            </div>
+          </div>
+          <div v-loading="loadingConfig" class="config-body">
+            <div class="config-columns">
+              <div class="config-column">
+                <div class="config-item">
+                  <span class="config-label">Version</span>
+                  <span class="config-value">{{ clientConfig.version || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Protocol</span>
+                  <span class="config-value">{{ clientConfig.protocol || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Wire Protocol</span>
+                  <span class="config-value">{{ clientConfig.wire_protocol || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">User</span>
+                  <span class="config-value">{{ clientConfig.user || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Client ID</span>
+                  <span class="config-value">{{ clientConfig.client_id || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Group</span>
+                  <span class="config-value">{{ clientConfig.group || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Server</span>
+                  <span class="config-value">
+                    {{ clientConfig.server_addr || '-' }}:{{ clientConfig.server_port || '-' }}
+                  </span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">TLS</span>
+                  <span class="config-value">{{ boolLabel(clientConfig.tls_enabled) }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">TCP Mux</span>
+                  <span class="config-value">{{ boolLabel(clientConfig.tcp_mux) }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Proxy URL</span>
+                  <span class="config-value">{{ clientConfig.proxy_url || '-' }}</span>
+                </div>
+              </div>
+              <div class="config-column">
+                <div class="config-item">
+                  <span class="config-label">Pool Count</span>
+                  <span class="config-value">{{ clientConfig.pool_count }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Heartbeat Interval</span>
+                  <span class="config-value">{{ clientConfig.heartbeat_interval }}s</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Heartbeat Timeout</span>
+                  <span class="config-value">{{ clientConfig.heartbeat_timeout }}s</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Dial Timeout</span>
+                  <span class="config-value">{{ clientConfig.dial_server_timeout }}s</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Dial Keepalive</span>
+                  <span class="config-value">{{ clientConfig.dial_server_keepalive }}s</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">UDP Packet Size</span>
+                  <span class="config-value">{{ clientConfig.udp_packet_size }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">DNS Server</span>
+                  <span class="config-value">{{ clientConfig.dns_server || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Log</span>
+                  <span class="config-value">{{ clientConfig.log_level }}{{ clientConfig.log_to && clientConfig.log_to !== 'console' ? ' → ' + clientConfig.log_to : '' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Web Server</span>
+                  <span class="config-value">{{ clientConfig.web_server_port ? clientConfig.web_server_addr + ':' + clientConfig.web_server_port : '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Login Fail Exit</span>
+                  <span class="config-value">{{ boolLabel(clientConfig.login_fail_exit) }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="clientConfig.metadatas && Object.keys(clientConfig.metadatas).length" class="config-section">
+              <div class="config-section-title">Metadatas</div>
+              <div class="config-columns">
+                <div class="config-column">
+                  <div v-for="(val, key) in clientConfig.metadatas" :key="key" class="config-item">
+                    <span class="config-label">{{ key }}</span>
+                    <span class="config-value">{{ val }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="clientConfig.start && clientConfig.start.length" class="config-section">
+              <div class="config-section-title">Start</div>
+              <div class="config-tags">
+                <el-tag v-for="name in clientConfig.start" :key="name" size="small" class="config-tag">{{ name }}</el-tag>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Proxies Card -->
         <div class="proxies-card">
           <div class="proxies-header">
@@ -101,12 +217,22 @@
               <span>Loading...</span>
             </div>
             <div v-else-if="filteredProxies.length > 0" class="proxies-list">
-              <ProxyCard
+              <div
                 v-for="proxy in filteredProxies"
                 :key="proxy.name"
-                :proxy="proxy"
-                show-type
-              />
+                class="proxy-item"
+              >
+                <ProxyCard :proxy="proxy" show-type />
+                <el-button
+                  v-if="client?.online"
+                  class="proxy-config-btn"
+                  size="small"
+                  circle
+                  @click.stop.prevent="openProxyConfig(proxy)"
+                >
+                  <el-icon><Setting /></el-icon>
+                </el-button>
+              </div>
             </div>
             <div v-else-if="clientProxies.length > 0" class="empty-state">
               <p>No proxies match "{{ proxySearch }}"</p>
@@ -126,6 +252,34 @@
         </router-link>
       </div>
     </div>
+
+    <!-- Proxy Config Dialog (view-only) -->
+    <BaseDialog
+      v-model="showProxyConfigDialog"
+      :title="'Proxy Config: ' + proxyConfigName"
+      width="600px"
+    >
+      <div v-loading="proxyConfigLoading">
+        <template v-if="proxyConfigData">
+          <div class="proxy-config-type">
+            <el-tag size="small" type="info">{{ proxyConfigData.proxy_type }}</el-tag>
+          </div>
+          <div class="proxy-config-fields">
+            <div
+              v-for="item in proxyConfigFields"
+              :key="item.key"
+              class="config-item"
+            >
+              <span class="config-label">{{ item.key }}</span>
+              <span class="config-value" :title="item.value">{{ item.value }}</span>
+            </div>
+          </div>
+        </template>
+      </div>
+      <template #footer>
+        <el-button size="small" @click="showProxyConfigDialog = false">Close</el-button>
+      </template>
+    </BaseDialog>
   </div>
 </template>
 
@@ -133,9 +287,9 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Loading, Search } from '@element-plus/icons-vue'
+import { ArrowLeft, Loading, Search, Setting } from '@element-plus/icons-vue'
 import { Client } from '../utils/client'
-import { getClient } from '../api/client'
+import { getClient, getClientConfig, getProxyConfig } from '../api/client'
 import { getProxiesByType } from '../api/proxy'
 import {
   BaseProxy,
@@ -146,14 +300,21 @@ import {
   TCPMuxProxy,
   STCPProxy,
   SUDPProxy,
+  Socks5RelayProxy,
 } from '../utils/proxy'
 import { getServerInfo } from '../api/server'
 import ProxyCard from '../components/ProxyCard.vue'
+import BaseDialog from '@shared/components/BaseDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 const client = ref<Client | null>(null)
 const loading = ref(true)
+
+const boolLabel = (val: boolean | null | undefined) => {
+  if (val === null || val === undefined) return '-'
+  return val ? 'On' : 'Off'
+}
 
 const goBack = () => {
   if (window.history.length > 1) {
@@ -218,9 +379,55 @@ const fetchClient = async () => {
   }
 }
 
+// Client config state (view-only)
+const clientConfig = ref<any>(null)
+const loadingConfig = ref(false)
+
+const fetchClientConfigData = async () => {
+  if (!client.value?.online) return
+  loadingConfig.value = true
+  try {
+    clientConfig.value = await getClientConfig(route.params.key as string)
+  } catch (error: any) {
+    ElMessage.error('Failed to fetch client config: ' + error.message)
+  } finally {
+    loadingConfig.value = false
+  }
+}
+
+// Proxy config state (view-only)
+const showProxyConfigDialog = ref(false)
+const proxyConfigLoading = ref(false)
+const proxyConfigData = ref<any>(null)
+const proxyConfigName = ref('')
+
+const proxyConfigFields = computed(() => {
+  const cfg = proxyConfigData.value?.config
+  if (!cfg || typeof cfg !== 'object') return []
+  return Object.entries(cfg).map(([key, val]) => ({
+    key,
+    value: typeof val === 'object' ? JSON.stringify(val) : String(val ?? '-'),
+  }))
+})
+
+const openProxyConfig = async (proxy: BaseProxy) => {
+  proxyConfigName.value = proxy.name
+  proxyConfigData.value = null
+  showProxyConfigDialog.value = true
+  proxyConfigLoading.value = true
+  try {
+    const resp = await getProxyConfig(route.params.key as string, proxy.name)
+    proxyConfigData.value = resp
+  } catch (error: any) {
+    ElMessage.error('Failed to fetch proxy config: ' + error.message)
+  } finally {
+    proxyConfigLoading.value = false
+  }
+}
+
 const fetchProxies = async () => {
   proxiesLoading.value = true
-  const proxyTypes = ['tcp', 'udp', 'http', 'https', 'tcpmux', 'stcp', 'sudp']
+  const proxyTypes = ['tcp', 'udp', 'http', 'https', 'tcpmux', 'stcp', 'sudp', 'socks5_relay']
   const proxies: BaseProxy[] = []
   try {
     const info = await fetchServerInfo()
@@ -261,6 +468,8 @@ const fetchProxies = async () => {
           proxies.push(...json.proxies.map((p: any) => new STCPProxy(p)))
         } else if (type === 'sudp') {
           proxies.push(...json.proxies.map((p: any) => new SUDPProxy(p)))
+        } else if (type === 'socks5_relay') {
+          proxies.push(...json.proxies.map((p: any) => new Socks5RelayProxy(p)))
         }
       } catch {
         // Ignore
@@ -274,9 +483,10 @@ const fetchProxies = async () => {
   }
 }
 
-onMounted(() => {
-  fetchClient()
+onMounted(async () => {
+  await fetchClient()
   fetchProxies()
+  fetchClientConfigData()
 })
 </script>
 
@@ -327,7 +537,8 @@ onMounted(() => {
 
 /* Card Base */
 .header-card,
-.proxies-card {
+.proxies-card,
+.config-card {
   background: var(--el-bg-color);
   border: 1px solid var(--header-border);
   border-radius: 12px;
@@ -440,6 +651,86 @@ html.dark .status-badge.online {
   word-break: break-all;
 }
 
+/* Config Card */
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--header-border);
+}
+
+.config-title h2 {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.config-body {
+  padding: 16px 24px;
+  min-height: 80px;
+}
+
+.config-columns {
+  display: flex;
+  gap: 40px;
+}
+
+.config-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.config-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.config-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+  word-break: break-all;
+  text-align: right;
+}
+
+.config-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--header-border);
+}
+
+.config-section-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.config-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.config-tag {
+  font-size: 12px;
+}
+
 /* Proxies Card */
 .proxies-header {
   display: flex;
@@ -489,6 +780,24 @@ html.dark .status-badge.online {
   gap: 12px;
 }
 
+.proxy-item {
+  position: relative;
+}
+
+.proxy-config-btn {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.proxy-item:hover .proxy-config-btn {
+  opacity: 1;
+}
+
 .loading-state {
   display: flex;
   align-items: center;
@@ -506,6 +815,19 @@ html.dark .status-badge.online {
 
 .empty-state p {
   margin: 0;
+}
+
+/* Proxy config dialog */
+.proxy-config-type {
+  margin-bottom: 12px;
+}
+
+.proxy-config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 /* Not Found */
@@ -536,6 +858,11 @@ html.dark .status-badge.online {
 
   .header-right {
     align-self: flex-start;
+  }
+
+  .config-columns {
+    flex-direction: column;
+    gap: 20px;
   }
 }
 </style>

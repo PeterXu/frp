@@ -899,8 +899,8 @@ func (svr *Service) RegisterControl(
 	xl := xlog.FromContextSafe(ctx)
 	xl.AppendPrefix(loginMsg.RunID)
 	ctx = xlog.NewContext(ctx, xl)
-	xl.Infof("client login info: ip [%s] version [%s] hostname [%s] os [%s] arch [%s]",
-		ctlConn.RemoteAddr().String(), loginMsg.Version, loginMsg.Hostname, loginMsg.Os, loginMsg.Arch)
+	xl.Infof("client login info: ip [%s] version [%s] hostname [%s] os [%s] arch [%s] wireProtocol [%s]",
+		ctlConn.RemoteAddr().String(), loginMsg.Version, loginMsg.Hostname, loginMsg.Os, loginMsg.Arch, wireProtocol)
 
 	// Check auth.
 	authVerifier := svr.auth.Verifier
