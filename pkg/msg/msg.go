@@ -38,30 +38,37 @@ const (
 	TypeNatHoleResp        byte = 'm'
 	TypeNatHoleSid         byte = '5'
 	TypeNatHoleReport      byte = '6'
+
+	TypeGetClientConfig     byte = 'g'
+	TypeGetClientConfigResp byte = '7'
 )
 
 var msgTypeMap = map[byte]any{
-	TypeLogin:              Login{},
-	TypeLoginResp:          LoginResp{},
-	TypeNewProxy:           NewProxy{},
-	TypeNewProxyResp:       NewProxyResp{},
-	TypeCloseProxy:         CloseProxy{},
-	TypeNewWorkConn:        NewWorkConn{},
-	TypeReqWorkConn:        ReqWorkConn{},
-	TypeStartWorkConn:      StartWorkConn{},
-	TypeNewVisitorConn:     NewVisitorConn{},
-	TypeNewVisitorConnResp: NewVisitorConnResp{},
-	TypePing:               Ping{},
-	TypePong:               Pong{},
-	TypeUDPPacket:          UDPPacket{},
-	TypeNatHoleVisitor:     NatHoleVisitor{},
-	TypeNatHoleClient:      NatHoleClient{},
-	TypeNatHoleResp:        NatHoleResp{},
-	TypeNatHoleSid:         NatHoleSid{},
-	TypeNatHoleReport:      NatHoleReport{},
+	TypeLogin:               Login{},
+	TypeLoginResp:           LoginResp{},
+	TypeNewProxy:            NewProxy{},
+	TypeNewProxyResp:        NewProxyResp{},
+	TypeCloseProxy:          CloseProxy{},
+	TypeNewWorkConn:         NewWorkConn{},
+	TypeReqWorkConn:         ReqWorkConn{},
+	TypeStartWorkConn:       StartWorkConn{},
+	TypeNewVisitorConn:      NewVisitorConn{},
+	TypeNewVisitorConnResp:  NewVisitorConnResp{},
+	TypePing:                Ping{},
+	TypePong:                Pong{},
+	TypeUDPPacket:           UDPPacket{},
+	TypeNatHoleVisitor:      NatHoleVisitor{},
+	TypeNatHoleClient:       NatHoleClient{},
+	TypeNatHoleResp:         NatHoleResp{},
+	TypeNatHoleSid:          NatHoleSid{},
+	TypeNatHoleReport:       NatHoleReport{},
+	TypeGetClientConfig:     GetClientConfig{},
+	TypeGetClientConfigResp: GetClientConfigResp{},
 }
 
 var TypeNameNatHoleResp = reflect.TypeFor[NatHoleResp]().Name()
+
+var TypeNameGetClientConfigResp = reflect.TypeFor[GetClientConfigResp]().Name()
 
 type ClientSpec struct {
 	// Due to the support of VirtualClient, frps needs to know the client type in order to
@@ -134,6 +141,7 @@ type NewProxy struct {
 
 	// socks5_relay
 	OutboundProxy string `json:"outbound_proxy,omitempty"`
+	MaxConcurrent int    `json:"max_concurrent,omitempty"`
 }
 
 type NewProxyResp struct {
@@ -247,4 +255,46 @@ type NatHoleSid struct {
 type NatHoleReport struct {
 	Sid     string `json:"sid,omitempty"`
 	Success bool   `json:"success,omitempty"`
+}
+
+// Client config messages (server → client request/response).
+
+type GetClientConfig struct {
+	TransactionID string `json:"transaction_id,omitempty"`
+}
+
+type GetClientConfigResp struct {
+	TransactionID string `json:"transaction_id,omitempty"`
+	Error         string `json:"error,omitempty"`
+
+	User         string `json:"user,omitempty"`
+	ClientID     string `json:"client_id,omitempty"`
+	Group        string `json:"group,omitempty"`
+	ServerAddr   string `json:"server_addr,omitempty"`
+	ServerPort   int    `json:"server_port,omitempty"`
+	Version      string `json:"version,omitempty"`
+	Protocol     string `json:"protocol,omitempty"`
+	WireProtocol string `json:"wire_protocol,omitempty"`
+
+	PoolCount               int    `json:"pool_count,omitempty"`
+	HeartbeatInterval       int64  `json:"heartbeat_interval,omitempty"`
+	HeartbeatTimeout        int64  `json:"heartbeat_timeout,omitempty"`
+	DialServerTimeout       int64  `json:"dial_server_timeout,omitempty"`
+	DialServerKeepAlive     int64  `json:"dial_server_keepalive,omitempty"`
+	TCPMux                  *bool  `json:"tcp_mux,omitempty"`
+	TCPMuxKeepaliveInterval int64  `json:"tcp_mux_keepalive_interval,omitempty"`
+	TLSEnabled              *bool  `json:"tls_enabled,omitempty"`
+	ProxyURL                string `json:"proxy_url,omitempty"`
+
+	LogTo      string `json:"log_to,omitempty"`
+	LogLevel   string `json:"log_level,omitempty"`
+	LogMaxDays int64  `json:"log_max_days,omitempty"`
+
+	DNSServer     string            `json:"dns_server,omitempty"`
+	Start         []string          `json:"start,omitempty"`
+	UDPPacketSize int64             `json:"udp_packet_size,omitempty"`
+	Metadatas     map[string]string `json:"metadatas,omitempty"`
+	WebServerAddr string            `json:"web_server_addr,omitempty"`
+	WebServerPort int               `json:"web_server_port,omitempty"`
+	LoginFailExit *bool             `json:"login_fail_exit,omitempty"`
 }

@@ -8,3 +8,11 @@ export const getClients = () => {
 export const getClient = (key: string) => {
   return http.get<ClientInfoData>(`../api/clients/${key}`)
 }
+
+export const getClientConfig = (key: string) => {
+  return http.get<any>(`../api/clients/${key}/config`)
+}
+
+export const getProxyConfig = (key: string, name: string) => {
+  return http.get<any>(`../api/clients/${key}/proxies/${name}/config`)
+}

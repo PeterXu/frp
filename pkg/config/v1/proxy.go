@@ -550,11 +550,13 @@ type Socks5RelayProxyConfig struct {
 func (c *Socks5RelayProxyConfig) MarshalToMsg(m *msg.NewProxy) {
 	c.ProxyBaseConfig.MarshalToMsg(m)
 	m.OutboundProxy = c.OutboundProxy
+	m.MaxConcurrent = c.MaxConcurrent
 }
 
 func (c *Socks5RelayProxyConfig) UnmarshalFromMsg(m *msg.NewProxy) {
 	c.ProxyBaseConfig.UnmarshalFromMsg(m)
 	c.OutboundProxy = m.OutboundProxy
+	c.MaxConcurrent = m.MaxConcurrent
 }
 
 func (c *Socks5RelayProxyConfig) Clone() ProxyConfigurer {
