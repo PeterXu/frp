@@ -954,8 +954,33 @@ func (svr *Service) RegisterVisitorConn(visitorConn net.Conn, newMsg *msg.NewVis
 		newMsg.UseEncryption, newMsg.UseCompression, visitorUser)
 }
 
-func (svr *Service) makeSelectFrpcFn() func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error) {
-	return func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error) {
+func (svr *Service) makeSelectFrpcFn() func(group, userID, targetUser string, dstAddr string, dstPort uint16) (net.Conn, string, string, error) {
+	return func(group, userID, targetUser string, dstAddr string, dstPort uint16) (net.Conn, string, string, error) {
+		// Direct targeting: no retry, just single attempt
+		if targetUser != "" {
+			ctl, proxyName, err := svr.sessionManager.SelectFrpc(group, userID, targetUser)
+			if err != nil {
+				return nil, "", "", err
+			}
+
+			workConn, err := ctl.GetWorkConn()
+			if err != nil {
+				return nil, "", "", fmt.Errorf("get work connection error: %w", err)
+			}
+
+			conn, err := workConn.Start(&msg.StartWorkConn{
+				ProxyName: proxyName,
+				DstAddr:   dstAddr,
+				DstPort:   dstPort,
+			})
+			if err != nil {
+				workConn.Close()
+				return nil, "", "", fmt.Errorf("start work connection error: %w", err)
+			}
+			return conn, proxyName, ctl.runID, nil
+		}
+
+		// Round-robin with retry (existing logic)
 		members := svr.groupRegistry.GetGroupMembers(group)
 		maxAttempts := len(members)
 		if maxAttempts == 0 {
@@ -970,7 +995,7 @@ func (svr *Service) makeSelectFrpcFn() func(group, userID string, dstAddr string
 				svr.sessionManager.ClearBinding(group + "@" + userID)
 			}
 
-			ctl, proxyName, err := svr.sessionManager.SelectFrpc(group, userID)
+			ctl, proxyName, err := svr.sessionManager.SelectFrpc(group, userID, targetUser)
 			if err != nil {
 				lastErr = err
 				xl.Debugf("select frpc attempt %d/%d for group [%s] failed: %v", attempt+1, maxAttempts, group, err)

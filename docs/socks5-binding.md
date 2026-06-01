@@ -2,7 +2,7 @@
 
 ## Overview
 
-When multiple frpc instances belong to the same group, frps uses round-robin to distribute connections. Optionally, a `userID` can be provided to enable session affinity — all connections from the same `userID` are routed to the same frpc.
+When multiple frpc instances belong to the same group, frps uses round-robin to distribute connections. Optionally, a `userID` can be provided to enable session affinity — all connections from the same `userID` are routed to the same frpc. Alternatively, a `targetUser` can be provided to directly target a specific frpc by its configured `user` field.
 
 ## Username Format
 
@@ -12,13 +12,19 @@ The SOCKS5 / HTTP CONNECT auth username determines the routing behavior:
 |-----------------|------------------------------------------------|
 | `group1`        | Pure round-robin, no session binding           |
 | `group1@userA`  | Session affinity: sticky to one frpc per user  |
+| `group1=frpc1`  | Direct targeting: route to specific frpc by its `user` field |
 
-The separator is `@`. Everything before `@` is the group name; everything after is the userID.
+The separators:
+- `@` for session affinity: everything before `@` is the group name; everything after is the userID.
+- `=` for direct targeting: everything before `=` is the group name; everything after is the target frpc's `user` field.
 
-## Session Affinity Rules
+Note: `userID` (session affinity) and `targetUser` (direct targeting) are mutually exclusive — you cannot use both in the same username.
 
-- **With userID**: first connection round-robin selects an frpc; subsequent connections with the same `group@userID` always route to that frpc (until it disconnects).
-- **Without userID**: every connection round-robin independently, no binding.
+## Routing Rules
+
+- **With userID (`@`)**: first connection round-robin selects an frpc; subsequent connections with the same `group@userID` always route to that frpc (until it disconnects).
+- **With targetUser (`=`)**: directly route to the frpc whose configured `user` field matches the targetUser; no round-robin, no session affinity. If that frpc is offline or not in the group, the connection fails.
+- **Without userID or targetUser**: every connection round-robin independently, no binding.
 - **Frpc disconnect**: all session bindings to that frpc are cleared; affected users rebind to a new frpc on next connection.
 
 ## Client Configuration
@@ -31,6 +37,13 @@ curl -x socks5h://group1:mypassword@172.19.78.38:1081 http://example.com
 
 # With userID — session affinity
 curl -x socks5h://group1@userA:mypassword@172.19.78.38:1081 http://example.com
+
+# With targetUser — direct targeting (route to frpc with user="frpc-beijing")
+curl -x socks5h://group1=frpc-beijing:mypassword@172.19.78.38:1081 http://example.com
+
+# With targetUser - ssh connect to frpc machine (no socks5h in ncat)
+ssh -o "ProxyCommand ncat --proxy-type socks5 --proxy 127.0.0.1:1081 --proxy-auth group=frpc-beijing:mypassword %h %p" remote-user@localhost
+ssh -o "ProxyCommand ncat --proxy-type socks5 --proxy 127.0.0.1:1081 --proxy-auth group=frpc-beijing:mypassword --proxy-dns remote %h %p" remote-user@localhost
 ```
 
 URL parsing (RFC 3986) splits on the **last** `@`, so `group1@userA:mypassword@host` is parsed as:
@@ -38,11 +51,16 @@ URL parsing (RFC 3986) splits on the **last** `@`, so `group1@userA:mypassword@h
 - username: `group1@userA`
 - password: `mypassword`
 
+Note: The `=` character is shell-safe (no escaping needed) and URI-safe (valid in userinfo).
+
 ### HTTP CONNECT Proxy
 
 ```bash
-# With userID
+# With userID — session affinity
 curl -x http://group1@userA:mypassword@172.19.78.38:8080 http://example.com
+
+# With targetUser — direct targeting
+curl -x http://group1=frpc-beijing:mypassword@172.19.78.38:8080 http://example.com
 ```
 
 ### proxychains4
