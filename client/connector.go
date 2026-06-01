@@ -139,11 +139,14 @@ func (c *defaultConnectorImpl) Open() error {
 		if err != nil {
 			return err
 		}
+		xl.Infof("QUIC connection established: keepalive=%ds, maxIdleTimeout=%ds, heartbeatInterval=%ds",
+			c.cfg.Transport.QUIC.KeepalivePeriod, c.cfg.Transport.QUIC.MaxIdleTimeout, c.cfg.Transport.HeartbeatInterval)
 		c.quicConn = conn
 		return nil
 	}
 
 	if !lo.FromPtr(c.cfg.Transport.TCPMux) {
+		xl.Infof("TCP connection mode: plain TCP (no mux), heartbeatInterval=%ds", c.cfg.Transport.HeartbeatInterval)
 		return nil
 	}
 
@@ -162,6 +165,7 @@ func (c *defaultConnectorImpl) Open() error {
 		conn.Close()
 		return err
 	}
+	xl.Infof("TCP mux connection established: keepaliveInterval=%ds", c.cfg.Transport.TCPMuxKeepaliveInterval)
 	c.muxSession = session
 	return nil
 }

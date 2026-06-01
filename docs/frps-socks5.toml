@@ -24,6 +24,13 @@ transport.quic.keepalivePeriod = 5 # 10
 transport.quic.maxIdleTimeout = 60 # 30
 transport.quic.maxIncomingStreams = 100000
 
+# Stateless reset key for fast crash detection across server restarts.
+# When set, clients can recognize stateless resets immediately (like TCP FIN/RST).
+# If not set, random key each startup → ~30s detection delay after crash.
+# Format: base64-encoded 32-byte string.
+# GENERATE KEY: openssl rand -base64 32 | head -c 32 | base64
+# transport.quic.statelessResetKey = "kR8PA+VqE3wYzN7tH2jF5cB9mX1dS4vL6gU0oI+pJxM="
+
 # Heartbeat configure, it's not recommended to modify the default value
 # The default value of heartbeatTimeout is 90. Set negative value to disable it.
 # transport.heartbeatTimeout = 90
