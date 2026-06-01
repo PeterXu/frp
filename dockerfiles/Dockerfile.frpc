@@ -43,4 +43,8 @@ RUN apk add --no-cache tzdata
 
 COPY --from=building /building/bin/frpc /usr/bin/frpc
 
+WORKDIR /data
+COPY docs/frpc-socks5.toml .
+COPY docs/frps-socks5.toml .
+
 ENTRYPOINT ["/usr/bin/frpc"]

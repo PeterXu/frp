@@ -43,4 +43,9 @@ RUN apk add --no-cache tzdata
 
 COPY --from=building /building/bin/frps /usr/bin/frps
 
+WORKDIR /data
+COPY docs/frpc-socks5.toml .
+COPY docs/frps-socks5.toml .
+COPY docker-compose.yml .
+
 ENTRYPOINT ["/usr/bin/frps"]
