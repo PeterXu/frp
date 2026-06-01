@@ -329,7 +329,7 @@ func (svr *Service) loopLoginUntilSuccess(maxInterval time.Duration, firstLoginE
 	xl := xlog.FromContextSafe(svr.ctx)
 
 	loginFunc := func() (bool, error) {
-		xl.Infof("try to connect to server...")
+		xl.Infof("try to connect to server by %s...", svr.common.Transport.Protocol)
 		dialer := &controlSessionDialer{
 			ctx:              svr.ctx,
 			common:           svr.common,

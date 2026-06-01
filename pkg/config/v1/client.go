@@ -164,7 +164,15 @@ func (c *ClientTransportConfig) Complete() {
 	c.PoolCount = util.EmptyOr(c.PoolCount, 1)
 	c.TCPMux = util.EmptyOr(c.TCPMux, lo.ToPtr(true))
 	c.TCPMuxKeepaliveInterval = util.EmptyOr(c.TCPMuxKeepaliveInterval, 30)
-	if lo.FromPtr(c.TCPMux) {
+	// For QUIC protocol, application-level heartbeat is necessary because:
+	// 1. QUIC-level PING frames are small (~7-9 bytes) and won't trigger stateless resets
+	//    (quic-go requires packets > 42 bytes to send stateless resets)
+	// 2. Application heartbeat packets (>42 bytes) WILL trigger stateless resets from server
+	// 3. This enables fast crash detection when statelessResetKey is configured on server
+	if c.Protocol == "quic" {
+		c.HeartbeatInterval = util.EmptyOr(c.HeartbeatInterval, 10)
+		c.HeartbeatTimeout = util.EmptyOr(c.HeartbeatTimeout, 90)
+	} else if lo.FromPtr(c.TCPMux) {
 		// If TCPMux is enabled, heartbeat of application layer is unnecessary because we can rely on heartbeat in tcpmux.
 		c.HeartbeatInterval = util.EmptyOr(c.HeartbeatInterval, -1)
 		c.HeartbeatTimeout = util.EmptyOr(c.HeartbeatTimeout, -1)

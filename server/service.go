@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -88,7 +89,8 @@ type Service struct {
 	kcpListener net.Listener
 
 	// Accept connections using quic
-	quicListener *quic.Listener
+	quicListener   *quic.Listener
+	quicTransport  *quic.Transport // only set when using statelessResetKey
 
 	// Accept connections using websocket
 	websocketListener net.Listener
@@ -274,7 +276,7 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 	ln = svr.muxer.DefaultListener()
 
 	svr.listener = ln
-	log.Infof("frps tcp listen on %s", address)
+	log.Infof("frps tcp listen on %s, tcpMux: enabled, tcpKeepalive=%ds", address, cfg.Transport.TCPKeepAlive)
 
 	// Listen for accepting connections from client using kcp protocol.
 	if cfg.KCPBindPort > 0 {
@@ -290,15 +292,47 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		address := net.JoinHostPort(cfg.BindAddr, strconv.Itoa(cfg.QUICBindPort))
 		quicTLSCfg := tlsConfig.Clone()
 		quicTLSCfg.NextProtos = []string{"frp"}
-		svr.quicListener, err = quic.ListenAddr(address, quicTLSCfg, &quic.Config{
+
+		quicConfig := &quic.Config{
 			MaxIdleTimeout:     time.Duration(cfg.Transport.QUIC.MaxIdleTimeout) * time.Second,
 			MaxIncomingStreams: int64(cfg.Transport.QUIC.MaxIncomingStreams),
 			KeepAlivePeriod:    time.Duration(cfg.Transport.QUIC.KeepalivePeriod) * time.Second,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("listen on quic udp address %s error: %v", address, err)
 		}
-		log.Infof("frps quic listen on %s", address)
+
+		// Parse StatelessResetKey for fast crash detection across restarts
+		if cfg.Transport.QUIC.StatelessResetKey != "" {
+			keyBytes, err := base64.StdEncoding.DecodeString(cfg.Transport.QUIC.StatelessResetKey)
+			if err != nil {
+				return nil, fmt.Errorf("decode quic statelessResetKey error: %v", err)
+			}
+			if len(keyBytes) != 32 {
+				return nil, fmt.Errorf("quic statelessResetKey must be 32 bytes, got %d", len(keyBytes))
+			}
+			var statelessResetKey quic.StatelessResetKey
+			copy(statelessResetKey[:], keyBytes)
+
+			udpConn, err := net.ListenPacket("udp", address)
+			if err != nil {
+				return nil, fmt.Errorf("listen on quic udp address %s error: %v", address, err)
+			}
+			svr.quicTransport = &quic.Transport{
+				Conn:              udpConn,
+				StatelessResetKey: &statelessResetKey,
+			}
+			svr.quicListener, err = svr.quicTransport.Listen(quicTLSCfg, quicConfig)
+			if err != nil {
+				return nil, fmt.Errorf("listen on quic udp address %s error: %v", address, err)
+			}
+			log.Infof("frps quic listen on %s, statelessResetKey: configured, keepalive=%ds, maxIdleTimeout=%ds (fast crash detection enabled)",
+				address, cfg.Transport.QUIC.KeepalivePeriod, cfg.Transport.QUIC.MaxIdleTimeout)
+		} else {
+			svr.quicListener, err = quic.ListenAddr(address, quicTLSCfg, quicConfig)
+			if err != nil {
+				return nil, fmt.Errorf("listen on quic udp address %s error: %v", address, err)
+			}
+			log.Infof("frps quic listen on %s, statelessResetKey: not configured, keepalive=%ds, maxIdleTimeout=%ds (crash detection ~%ds)",
+				address, cfg.Transport.QUIC.KeepalivePeriod, cfg.Transport.QUIC.MaxIdleTimeout, cfg.Transport.QUIC.MaxIdleTimeout)
+		}
 	}
 
 	if cfg.SSHTunnelGateway.BindPort > 0 {
@@ -473,6 +507,9 @@ func (svr *Service) Close() error {
 	}
 	if svr.quicListener != nil {
 		svr.quicListener.Close()
+	}
+	if svr.quicTransport != nil {
+		svr.quicTransport.Close()
 	}
 	if svr.websocketListener != nil {
 		svr.websocketListener.Close()
