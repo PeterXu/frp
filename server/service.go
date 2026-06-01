@@ -275,6 +275,14 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		return nil, fmt.Errorf("create server listener error, %v", err)
 	}
 
+	// WARNING: ProxyProtocol wraps the main bind listener, so ALL incoming
+	// connections (including frpc control channel) must send PROXY protocol
+	// headers. Only enable when the entire traffic path is behind a Layer 4
+	// proxy (e.g., Nginx stream, HAProxy) that sends PROXY protocol headers.
+	if cfg.Transport.ProxyProtocol {
+		ln = &proxyproto.Listener{Listener: ln}
+	}
+
 	svr.muxer = mux.NewMux(ln)
 	svr.muxer.SetKeepAlive(time.Duration(cfg.Transport.TCPKeepAlive) * time.Second)
 	go func() {

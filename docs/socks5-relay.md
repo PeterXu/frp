@@ -93,6 +93,38 @@ The frps dashboard includes real-time relay connection monitoring:
 | PUT | `/api/socks5relay/retention` | Set retention duration (0-3600 seconds) |
 | POST | `/api/reload_tls` | Hot-reload CRL file from disk |
 
+## TLS + Nginx Stream Proxy
+
+When frps sits behind an nginx stream proxy with `proxy_protocol on`, both the main frpc listener and the SOCKS5/HTTP CONNECT listeners need to strip the PROXY protocol header before TLS detection. Set `transport.proxyProtocol = true` in frps.toml — this wraps all TCP listeners (main, SOCKS5, HTTP CONNECT) with `proxyproto.Listener`.
+
+```toml
+# frps.toml
+transport.proxyProtocol = true
+```
+
+Nginx config:
+
+```nginx
+# nginx.conf
+stream {
+    server {
+        listen 3001;
+        proxy_pass 127.0.0.1:7000;
+        proxy_protocol on;
+    }
+}
+```
+
+frpc connects to the nginx port:
+
+```toml
+# frpc.toml
+serverAddr = "frps-host"
+serverPort = 3001
+```
+
+**Important**: Setting `transport.tls.trustedCaFile` (for mTLS) auto-enables `tls.force = true` — frps will reject any non-TLS connection. This is why the PROXY protocol header must be consumed first, otherwise frps reads `"PROXY..."` bytes instead of the TLS ClientHello and rejects the connection.
+
 ## TLS Client Certificate Revocation (CRL)
 
 When `transport.tls.trustedCaFile` is configured for mutual TLS, frps can also check a Certificate Revocation List to reject revoked client certificates:
