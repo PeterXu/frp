@@ -242,7 +242,9 @@ func (ctl *Control) heartbeatWorker() {
 				xl.Warnf("error during ping authentication: %v, skip sending ping message", err)
 				return false, err
 			}
-			_ = ctl.msgDispatcher.Send(pingMsg)
+			if err := ctl.msgDispatcher.Send(pingMsg); err != nil {
+				return false, err
+			}
 			return false, nil
 		}
 

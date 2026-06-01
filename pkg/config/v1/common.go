@@ -36,9 +36,23 @@ const (
 
 // QUIC protocol options
 type QUICOptions struct {
-	KeepalivePeriod    int `json:"keepalivePeriod,omitempty"`
-	MaxIdleTimeout     int `json:"maxIdleTimeout,omitempty"`
+	// KeepalivePeriod specifies the interval for sending QUIC keepalive PING frames.
+	// Default is 10 seconds. Actual interval is capped at half of MaxIdleTimeout.
+	KeepalivePeriod int `json:"keepalivePeriod,omitempty"`
+	// MaxIdleTimeout specifies the maximum duration without incoming network activity
+	// before the connection is closed. Default is 30 seconds.
+	MaxIdleTimeout int `json:"maxIdleTimeout,omitempty"`
+	// MaxIncomingStreams specifies the maximum number of concurrent bidirectional streams.
+	// Default is 100000.
 	MaxIncomingStreams int `json:"maxIncomingStreams,omitempty"`
+	// StatelessResetKey is a 32-byte key used to generate stateless reset tokens.
+	// When set, clients can recognize stateless resets across server restarts, enabling
+	// fast detection of server process crash (similar to TCP FIN/RST behavior).
+	// If not set, a random key is generated at startup, causing ~30s detection delay
+	// after server restart because clients cannot recognize stateless reset tokens.
+	// Format: base64-encoded 32-byte string, e.g., "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"
+	// This option is only effective on frps (server side).
+	StatelessResetKey string `json:"statelessResetKey,omitempty"`
 }
 
 func (c *QUICOptions) Complete() {
