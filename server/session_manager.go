@@ -34,17 +34,23 @@ func NewSessionManager(groupRegistry *Socks5RelayGroupRegistry, ctlManager *Cont
 	}
 }
 
-// SelectFrpc selects a frpc Control for the given group and optional userID.
+// SelectFrpc selects a frpc Control for the given group and optional userID or targetUser.
+// When targetUser is present, directly targets the frpc with that user field (no round-robin).
 // When userID is present, uses session affinity keyed by "group@userID":
 //   - if previously bound to a live frpc, return it (sticky session)
 //   - otherwise, select a new frpc via round-robin and store the binding
 //
-// When userID is empty, always round-robin without session binding.
+// When both are empty, always round-robin without session binding.
 // Returns the Control and the proxyName needed for work connection dispatch.
-func (sm *SessionManager) SelectFrpc(group, userID string) (*Control, string, error) {
+func (sm *SessionManager) SelectFrpc(group, userID, targetUser string) (*Control, string, error) {
 	// Check if group is disabled
 	if sm.groupRegistry.IsGroupDisabled(group) {
 		return nil, "", fmt.Errorf("group [%s] is disabled", group)
+	}
+
+	// Direct targeting by frpc's user field: no round-robin, no session affinity
+	if targetUser != "" {
+		return sm.selectByTargetUser(group, targetUser)
 	}
 
 	// Session affinity: only when userID is present
@@ -186,4 +192,37 @@ func (sm *SessionManager) GetAllSessions() map[string]string {
 		result[username] = runID
 	}
 	return result
+}
+
+// selectByTargetUser directly targets an frpc by its configured user field.
+// No round-robin, no session affinity - just direct lookup.
+func (sm *SessionManager) selectByTargetUser(group, targetUser string) (*Control, string, error) {
+	// Get all runIDs in this group
+	members := sm.groupRegistry.GetGroupMembers(group)
+	if len(members) == 0 {
+		return nil, "", fmt.Errorf("group [%s] has no members", group)
+	}
+
+	// Find the runID whose Control has matching user field
+	for _, runID := range members {
+		// Check if client is disabled
+		if sm.groupRegistry.IsClientDisabled(runID) {
+			continue
+		}
+
+		ctl, ok := sm.ctlManager.GetByID(runID)
+		if !ok {
+			continue // offline
+		}
+
+		if ctl.sessionCtx.LoginMsg.User == targetUser {
+			proxyName := sm.groupRegistry.GetProxyName(group, runID)
+			if proxyName == "" {
+				continue // member without proxy
+			}
+			return ctl, proxyName, nil
+		}
+	}
+
+	return nil, "", fmt.Errorf("frpc with user [%s] not found, offline, or disabled in group [%s]", targetUser, group)
 }
