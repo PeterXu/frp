@@ -26,7 +26,7 @@ import (
 type SOCKS5Handler struct {
 	listener     net.Listener
 	authPassword string
-	selectFrpcFn func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error)
+	selectFrpcFn func(group, userID, targetUser string, dstAddr string, dstPort uint16) (net.Conn, string, string, error)
 	connTracker  *RelayConnTracker
 	connLimit    chan struct{} // nil = unlimited
 }
@@ -34,7 +34,7 @@ type SOCKS5Handler struct {
 func NewSOCKS5Handler(
 	listener net.Listener,
 	authPassword string,
-	selectFrpcFn func(group, userID string, dstAddr string, dstPort uint16) (net.Conn, string, string, error),
+	selectFrpcFn func(group, userID, targetUser string, dstAddr string, dstPort uint16) (net.Conn, string, string, error),
 	connTracker *RelayConnTracker,
 	connLimit chan struct{},
 ) *SOCKS5Handler {
@@ -99,8 +99,8 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 		return
 	}
 
-	// SOCKS5 auth (username = group[@userID], password = authPassword)
-	group, userID, err := h.socks5Auth(clientConn)
+	// SOCKS5 auth (username = group[@userID] or group[!targetUser], password = authPassword)
+	group, userID, targetUser, err := h.socks5Auth(clientConn)
 	if err != nil {
 		xl.Debugf("socks5 auth error: %v", err)
 		return
@@ -114,7 +114,7 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 	}
 
 	// Select frpc and get work connection with target address
-	workConn, proxyName, runID, err := h.selectFrpcFn(group, userID, dstAddr, dstPort)
+	workConn, proxyName, runID, err := h.selectFrpcFn(group, userID, targetUser, dstAddr, dstPort)
 	if err != nil {
 		xl.Warnf("select frpc for group [%s] error: %v", group, err)
 		clientConn.SetDeadline(time.Time{}) // clear deadline so error reply can be sent
@@ -167,18 +167,44 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 	}
 }
 
-// parseGroupUserID splits a SOCKS5 username into group and userID.
-// Format: "group" (no userID) or "group@userID".
-func parseGroupUserID(username string) (group, userID string, err error) {
-	parts := strings.SplitN(username, "@", 2)
-	group = parts[0]
+// parseGroupUserID parses a SOCKS5 username into group, userID, and targetUser.
+// Format: "group" (round-robin) | "group@userID" (session affinity) | "group=targetUser" (direct targeting).
+// The userID and targetUser are mutually exclusive - direct targeting bypasses session affinity.
+// Returns error if username contains both '@' and '=' (ambiguous).
+func parseGroupUserID(username string) (group, userID, targetUser string, err error) {
+	hasAt := strings.Index(username, "@") >= 0
+	hasEqual := strings.Index(username, "=") >= 0
+
+	// Reject ambiguous usernames with both delimiters
+	if hasAt && hasEqual {
+		return "", "", "", fmt.Errorf("username [%s] contains both '@' and '=' - ambiguous format", username)
+	}
+
+	if hasEqual {
+		// Direct targeting: group=targetUser
+		idx := strings.Index(username, "=")
+		group = username[:idx]
+		targetUser = username[idx+1:]
+		if targetUser == "" {
+			return "", "", "", fmt.Errorf("empty targetUser after '=' in username [%s]", username)
+		}
+	} else if hasAt {
+		// Session affinity: group@userID
+		idx := strings.Index(username, "@")
+		group = username[:idx]
+		userID = username[idx+1:]
+		if userID == "" {
+			return "", "", "", fmt.Errorf("empty userID after '@' in username [%s]", username)
+		}
+	} else {
+		// Pure round-robin: group
+		group = username
+	}
+
 	if group == "" {
-		return "", "", fmt.Errorf("empty group in username [%s]", username)
+		return "", "", "", fmt.Errorf("empty group in username [%s]", username)
 	}
-	if len(parts) == 2 {
-		userID = parts[1]
-	}
-	return group, userID, nil
+	return group, userID, targetUser, nil
 }
 
 // socks5Handshake performs the initial SOCKS5 greeting.
@@ -217,47 +243,47 @@ func (h *SOCKS5Handler) socks5Handshake(conn net.Conn) error {
 }
 
 // socks5Auth performs SOCKS5 username/password authentication.
-// Username format: "group" or "group@userID".
-// Returns the group and userID separately.
-func (h *SOCKS5Handler) socks5Auth(conn net.Conn) (group, userID string, err error) {
+// Username format: "group" | "group@userID" | "group!targetUser".
+// Returns the group, userID, and targetUser separately.
+func (h *SOCKS5Handler) socks5Auth(conn net.Conn) (group, userID, targetUser string, err error) {
 	buf := make([]byte, 2)
 	if _, err := io.ReadFull(conn, buf); err != nil {
-		return "", "", fmt.Errorf("read auth version: %w", err)
+		return "", "", "", fmt.Errorf("read auth version: %w", err)
 	}
 	// buf[0] = sub-negotiation version (0x01)
 	ulen := int(buf[1])
 	username := make([]byte, ulen)
 	if _, err := io.ReadFull(conn, username); err != nil {
-		return "", "", fmt.Errorf("read username: %w", err)
+		return "", "", "", fmt.Errorf("read username: %w", err)
 	}
 
 	buf2 := make([]byte, 1)
 	if _, err := io.ReadFull(conn, buf2); err != nil {
-		return "", "", fmt.Errorf("read password length: %w", err)
+		return "", "", "", fmt.Errorf("read password length: %w", err)
 	}
 	plen := int(buf2[0])
 	password := make([]byte, plen)
 	if _, err := io.ReadFull(conn, password); err != nil {
-		return "", "", fmt.Errorf("read password: %w", err)
+		return "", "", "", fmt.Errorf("read password: %w", err)
 	}
 
 	if subtle.ConstantTimeCompare(password, []byte(h.authPassword)) != 1 {
 		conn.Write([]byte{0x01, 0x01}) // auth failure
-		return "", "", fmt.Errorf("auth failed for user [%s]", string(username))
+		return "", "", "", fmt.Errorf("auth failed for user [%s]", string(username))
 	}
 
 	if len(username) == 0 {
 		conn.Write([]byte{0x01, 0x01}) // auth failure
-		return "", "", fmt.Errorf("empty username")
+		return "", "", "", fmt.Errorf("empty username")
 	}
 
 	conn.Write([]byte{0x01, 0x00}) // auth success
 
-	group, userID, err = parseGroupUserID(string(username))
+	group, userID, targetUser, err = parseGroupUserID(string(username))
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	return group, userID, nil
+	return group, userID, targetUser, nil
 }
 
 // socks5ConnectRequest reads the SOCKS5 connect request and returns target address.
