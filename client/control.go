@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"net"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -227,6 +228,7 @@ func (ctl *Control) registerMsgHandlers() {
 	ctl.msgDispatcher.RegisterHandler(&msg.NatHoleResp{}, ctl.handleNatHoleResp)
 	ctl.msgDispatcher.RegisterHandler(&msg.Pong{}, ctl.handlePong)
 	ctl.msgDispatcher.RegisterHandler(&msg.GetClientConfig{}, msg.AsyncHandler(ctl.handleGetClientConfig))
+	ctl.msgDispatcher.RegisterHandler(&msg.ReqClientMetrics{}, msg.AsyncHandler(ctl.handleReqClientMetrics))
 }
 
 // heartbeatWorker sends heartbeat to server and check heartbeat timeout.
@@ -332,5 +334,24 @@ func (ctl *Control) handleGetClientConfig(m msg.Message) {
 		LoginFailExit: common.LoginFailExit,
 	}
 	xl.Debugf("[remote-config] sending GetClientConfigResp to server, txID: %s", inMsg.TransactionID)
+	_ = ctl.msgDispatcher.Send(resp)
+}
+
+func (ctl *Control) handleReqClientMetrics(m msg.Message) {
+	inMsg := m.(*msg.ReqClientMetrics)
+	xl := ctl.xl
+	xl.Debugf("received ReqClientMetrics request from server, txID: %s", inMsg.TransactionID)
+
+	var mstats runtime.MemStats
+	runtime.ReadMemStats(&mstats)
+
+	resp := &msg.ClientMetricsResp{
+		TransactionID: inMsg.TransactionID,
+		CPUUsage:      getCPUSeconds(),
+		MemAlloc:      mstats.Alloc,
+		MemSys:        mstats.Sys,
+		NumGC:         mstats.NumGC,
+		NumGoroutine:  runtime.NumGoroutine(),
+	}
 	_ = ctl.msgDispatcher.Send(resp)
 }

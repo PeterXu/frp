@@ -74,6 +74,7 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	// client config view routes
 	subRouter.HandleFunc("/api/clients/{key}/config", httppkg.MakeHTTPHandlerFunc(svr.apiClientGetConfig)).Methods("GET")
 	subRouter.HandleFunc("/api/clients/{key}/proxies/{name}/config", httppkg.MakeHTTPHandlerFunc(svr.apiProxyGetConfig)).Methods("GET")
+	subRouter.HandleFunc("/api/clients/{key}/metrics", httppkg.MakeHTTPHandlerFunc(svr.apiClientGetMetrics)).Methods("GET")
 
 	// view
 	subRouter.Handle("/favicon.ico", http.FileServer(helper.AssetsFS)).Methods("GET")
@@ -400,4 +401,35 @@ func (svr *Service) apiProxyGetConfig(ctx *httppkg.Context) (any, error) {
 		"proxy_type": pxy.GetConfigurer().GetBaseConfig().Type,
 		"config":     pxy.GetConfigurer(),
 	}, nil
+}
+
+func (svr *Service) apiClientGetMetrics(ctx *httppkg.Context) (any, error) {
+	key := ctx.Param("key")
+	if key == "" {
+		return nil, fmt.Errorf("missing client key")
+	}
+
+	ctl, err := svr.lookupClientControl(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ctl.SupportsFeature(msg.FeatureMetrics) {
+		return nil, httppkg.NewError(http.StatusBadRequest, "client version does not support metrics")
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx.Req.Context(), 3*time.Second)
+	defer cancel()
+
+	txID := newTransactionID()
+	ctl.xl.Debugf("sending ReqClientMetrics request to client [%s], txID: %s", ctl.runID, txID)
+	resp, err := ctl.MsgTransporter().Do(timeoutCtx, &msg.ReqClientMetrics{TransactionID: txID}, txID, msg.TypeNameClientMetricsResp)
+	if err != nil {
+		ctl.xl.Errorf("ReqClientMetrics request to client [%s] failed, txID: %s: %v", ctl.runID, txID, err)
+		return nil, httppkg.NewError(http.StatusGatewayTimeout, fmt.Sprintf("timeout waiting for client response: %v", err))
+	}
+	ctl.xl.Debugf("ReqClientMetrics request to client [%s] succeeded, txID: %s", ctl.runID, txID)
+	r := resp.(*msg.ClientMetricsResp)
+	r.TransactionID = ""
+	return r, nil
 }

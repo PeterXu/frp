@@ -39,8 +39,10 @@ const (
 	TypeNatHoleSid         byte = '5'
 	TypeNatHoleReport      byte = '6'
 
-	TypeGetClientConfig     byte = 'g'
-	TypeGetClientConfigResp byte = '7'
+	TypeGetClientConfig      byte = 'g'
+	TypeGetClientConfigResp  byte = '7'
+	TypeReqClientMetrics     byte = '8'
+	TypeClientMetricsResp    byte = '9'
 )
 
 var msgTypeMap = map[byte]any{
@@ -64,6 +66,8 @@ var msgTypeMap = map[byte]any{
 	TypeNatHoleReport:       NatHoleReport{},
 	TypeGetClientConfig:     GetClientConfig{},
 	TypeGetClientConfigResp: GetClientConfigResp{},
+	TypeReqClientMetrics:    ReqClientMetrics{},
+	TypeClientMetricsResp:   ClientMetricsResp{},
 }
 
 var TypeNameNatHoleResp = reflect.TypeFor[NatHoleResp]().Name()
@@ -94,6 +98,11 @@ type Login struct {
 
 	// Currently only effective for VirtualClient.
 	ClientSpec ClientSpec `json:"client_spec,omitempty"`
+
+	// SupportedFeatures lists feature names this frpc binary supports.
+	// frps uses this to avoid sending requests (like ReqClientMetrics) to
+	// older clients that would never respond.
+	SupportedFeatures []string `json:"supported_features,omitempty"`
 
 	// Some global configures.
 	PoolCount int `json:"pool_count,omitempty"`
@@ -297,4 +306,20 @@ type GetClientConfigResp struct {
 	WebServerAddr string            `json:"web_server_addr,omitempty"`
 	WebServerPort int               `json:"web_server_port,omitempty"`
 	LoginFailExit *bool             `json:"login_fail_exit,omitempty"`
+}
+
+var TypeNameClientMetricsResp = reflect.TypeFor[ClientMetricsResp]().Name()
+
+type ReqClientMetrics struct {
+	TransactionID string `json:"transaction_id,omitempty"`
+}
+
+type ClientMetricsResp struct {
+	TransactionID string  `json:"transaction_id,omitempty"`
+	Error         string  `json:"error,omitempty"`
+	CPUUsage      float64 `json:"cpu_usage,omitempty"`
+	MemAlloc      uint64  `json:"mem_alloc,omitempty"`
+	MemSys        uint64  `json:"mem_sys,omitempty"`
+	NumGC         uint32  `json:"num_gc,omitempty"`
+	NumGoroutine  int     `json:"num_goroutine,omitempty"`
 }

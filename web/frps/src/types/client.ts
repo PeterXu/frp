@@ -13,3 +13,11 @@ export interface ClientInfoData {
   disconnectedAt?: number
   online: boolean
 }
+
+export interface ClientMetricsData {
+  cpu_usage: number
+  mem_alloc: number
+  mem_sys: number
+  num_gc: number
+  num_goroutine: number
+}

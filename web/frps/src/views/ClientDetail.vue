@@ -196,6 +196,65 @@
           </div>
         </div>
 
+        <!-- Resources Card -->
+        <div v-if="client?.online" class="resources-card">
+          <div class="config-header">
+            <div class="config-title">
+              <h2>Resources</h2>
+            </div>
+            <div class="resources-actions">
+              <el-tag v-if="pollingActive" size="small" type="warning">Polling 5s</el-tag>
+              <el-button
+                v-if="!showMetrics"
+                size="small"
+                type="primary"
+                :loading="loadingMetrics"
+                @click="fetchMetrics"
+              >
+                Load metrics
+              </el-button>
+              <el-button
+                v-else
+                size="small"
+                @click="stopPolling"
+              >
+                Stop
+              </el-button>
+            </div>
+          </div>
+          <div v-if="showMetrics" class="config-body">
+            <div v-loading="loadingMetrics" class="config-columns">
+              <div class="config-column">
+                <div class="config-item">
+                  <span class="config-label">Allocated Memory</span>
+                  <span class="config-value">{{ formatBytes(metricsData?.mem_alloc) }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">System Memory</span>
+                  <span class="config-value">{{ formatBytes(metricsData?.mem_sys) }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">GC Cycles</span>
+                  <span class="config-value">{{ metricsData?.num_gc ?? '-' }}</span>
+                </div>
+              </div>
+              <div class="config-column">
+                <div class="config-item">
+                  <span class="config-label">Goroutines</span>
+                  <span class="config-value">{{ metricsData?.num_goroutine ?? '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">CPU Time</span>
+                  <span class="config-value">{{ formatCPUTime(metricsData?.cpu_usage) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="metricsError" class="metrics-error">
+            {{ metricsError }}
+          </div>
+        </div>
+
         <!-- Proxies Card -->
         <div class="proxies-card">
           <div class="proxies-header">
@@ -284,12 +343,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Loading, Search, Setting } from '@element-plus/icons-vue'
 import { Client } from '../utils/client'
-import { getClient, getClientConfig, getProxyConfig } from '../api/client'
+import { getClient, getClientConfig, getProxyConfig, getClientMetrics } from '../api/client'
 import { getProxiesByType } from '../api/proxy'
 import {
   BaseProxy,
@@ -305,6 +364,7 @@ import {
 import { getServerInfo } from '../api/server'
 import ProxyCard from '../components/ProxyCard.vue'
 import BaseDialog from '@shared/components/BaseDialog.vue'
+import type { ClientMetricsData } from '../types/client'
 
 const route = useRoute()
 const router = useRouter()
@@ -382,6 +442,64 @@ const fetchClient = async () => {
 // Client config state (view-only)
 const clientConfig = ref<any>(null)
 const loadingConfig = ref(false)
+
+// Resource metrics state
+const metricsData = ref<ClientMetricsData | null>(null)
+const loadingMetrics = ref(false)
+const showMetrics = ref(false)
+const pollingActive = ref(false)
+const metricsError = ref('')
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const formatBytes = (bytes: number | undefined): string => {
+  if (bytes === undefined || bytes === null) return '-'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+}
+
+const formatCPUTime = (seconds: number | undefined): string => {
+  if (seconds === undefined || seconds === null) return '-'
+  if (seconds < 60) return seconds.toFixed(1) + 's'
+  if (seconds < 3600) return (seconds / 60).toFixed(1) + 'm'
+  return (seconds / 3600).toFixed(1) + 'h'
+}
+
+const fetchMetrics = async () => {
+  if (!client.value?.online) return
+  if (loadingMetrics.value) return
+  loadingMetrics.value = true
+  metricsError.value = ''
+  try {
+    const data = await getClientMetrics(route.params.key as string)
+    metricsData.value = data
+    showMetrics.value = true
+    if (!pollingActive.value) {
+      startPolling()
+    }
+  } catch (error: any) {
+    metricsError.value = 'Failed to fetch metrics: ' + (error.message || error)
+    stopPolling()
+  } finally {
+    loadingMetrics.value = false
+  }
+}
+
+const startPolling = () => {
+  stopPolling()
+  pollingActive.value = true
+  pollTimer = setInterval(fetchMetrics, 5000)
+}
+
+const stopPolling = () => {
+  pollingActive.value = false
+  showMetrics.value = false
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
 
 const fetchClientConfigData = async () => {
   if (!client.value?.online) return
@@ -487,6 +605,10 @@ onMounted(async () => {
   await fetchClient()
   fetchProxies()
   fetchClientConfigData()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 
@@ -847,6 +969,26 @@ html.dark .status-badge.online {
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0 0 20px;
+}
+
+/* Resources Card */
+.resources-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--header-border);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.resources-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metrics-error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--el-color-danger);
 }
 
 /* Responsive */

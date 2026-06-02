@@ -45,6 +45,8 @@ const (
 	V2TypeNatHoleReport       uint16 = 18
 	V2TypeGetClientConfig     uint16 = 19
 	V2TypeGetClientConfigResp uint16 = 20
+	V2TypeReqClientMetrics    uint16 = 21
+	V2TypeClientMetricsResp   uint16 = 22
 )
 
 var v2MsgTypeMap = map[uint16]any{
@@ -68,6 +70,8 @@ var v2MsgTypeMap = map[uint16]any{
 	V2TypeNatHoleReport:       NatHoleReport{},
 	V2TypeGetClientConfig:     GetClientConfig{},
 	V2TypeGetClientConfigResp: GetClientConfigResp{},
+	V2TypeReqClientMetrics:    ReqClientMetrics{},
+	V2TypeClientMetricsResp:   ClientMetricsResp{},
 }
 
 var v2MsgReflectTypeMap, v2MsgTypeIDMap = buildV2MsgTypeMaps()
