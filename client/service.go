@@ -16,9 +16,7 @@ package client
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -28,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/denisbrodbeck/machineid"
 	"github.com/fatedier/golib/crypto"
 	"github.com/samber/lo"
 
@@ -42,6 +39,7 @@ import (
 	httppkg "github.com/fatedier/frp/pkg/util/http"
 	"github.com/fatedier/frp/pkg/util/log"
 	netpkg "github.com/fatedier/frp/pkg/util/net"
+	"github.com/fatedier/frp/pkg/util/system"
 	"github.com/fatedier/frp/pkg/util/wait"
 	"github.com/fatedier/frp/pkg/util/xlog"
 	"github.com/fatedier/frp/pkg/vnet"
@@ -201,7 +199,7 @@ func NewService(options ServiceOptions) (*Service, error) {
 
 	// GenerateUserFromHardware has highest priority
 	if options.Common.GenerateUserFromHardware {
-		if hwUser := generateUserFromHardware(); hwUser != "" {
+		if hwUser := system.GenerateUserFromHardware(); hwUser != "" {
 			log.Infof("GenerateUserFromHardware: generated user [%s] overrides user [%s]", hwUser, options.Common.User)
 			options.Common.User = hwUser
 		}
@@ -562,16 +560,4 @@ func parseCertSubject(certFile string) (cn string, ou string) {
 		ou = cert.Subject.OrganizationalUnit[0]
 	}
 	return
-}
-
-// generateUserFromHardware generates a unique user identifier from machine ID.
-func generateUserFromHardware() string {
-	id, err := machineid.ID()
-	if err != nil {
-		log.Warnf("GenerateUserFromHardware: failed to get machine ID: %v", err)
-		return ""
-	}
-
-	hash := sha256.Sum256([]byte(id))
-	return hex.EncodeToString(hash[:])[:16]
 }
