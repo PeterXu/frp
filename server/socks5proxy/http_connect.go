@@ -24,6 +24,7 @@ import (
 
 	libio "github.com/fatedier/golib/io"
 
+	"github.com/fatedier/frp/pkg/util/socks5"
 	"github.com/fatedier/frp/pkg/util/xlog"
 )
 
@@ -139,6 +140,10 @@ func (h *HTTPConnectHandler) handleConn(ctx context.Context, conn net.Conn) {
 	}
 	port := uint16(parsedPort)
 
+	// Log the proxy connection with complete URL
+	xl.Infof("http connect proxy connection: src [%s] group [%s] userID [%s] targetUser [%s], target [http://%s:%d]",
+		conn.RemoteAddr(), group, userID, targetUser, host, port)
+
 	// Select frpc and get work connection
 	workConn, proxyName, runID, err := h.selectFrpcFn(group, userID, targetUser, host, port)
 	if err != nil {
@@ -242,7 +247,7 @@ func (h *HTTPConnectHandler) extractAuth(req *http.Request) (group, userID, targ
 		return "", "", "", fmt.Errorf("auth failed")
 	}
 
-	group, userID, targetUser, err = parseGroupUserID(parts[0])
+	group, userID, targetUser, err = socks5.ParseGroupUserID(parts[0])
 	if err != nil {
 		return "", "", "", err
 	}

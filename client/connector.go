@@ -172,15 +172,18 @@ func (c *defaultConnectorImpl) Open() error {
 
 // Connect returns a stream from the underlying connection, or a new TCP connection if TCPMux isn't enabled.
 func (c *defaultConnectorImpl) Connect() (net.Conn, error) {
+	xl := xlog.FromContextSafe(c.ctx)
 	if c.quicConn != nil {
 		stream, err := c.quicConn.OpenStreamSync(context.Background())
 		if err != nil {
+			xl.Warnf("connector.Connect: quic OpenStreamSync FAILED - %v", err)
 			return nil, err
 		}
 		return netpkg.QuicStreamToNetConn(stream, c.quicConn), nil
 	} else if c.muxSession != nil {
 		stream, err := c.muxSession.OpenStream()
 		if err != nil {
+			xl.Warnf("connector.Connect: mux OpenStream FAILED - %v", err)
 			return nil, err
 		}
 		return stream, nil

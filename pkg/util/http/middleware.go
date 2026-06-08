@@ -49,9 +49,13 @@ func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 
 func NewRequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Infof("http request: [%s]", r.URL.Path)
+		log.Debugf("http request: [%s]", r.URL.Path)
 		rw := &responseWriter{ResponseWriter: w, code: http.StatusOK}
 		next.ServeHTTP(rw, r)
-		log.Infof("http response [%s]: code [%d]", r.URL.Path, rw.code)
+		if rw.code == 200 {
+			log.Debugf("http response [%s]: code [%d]", r.URL.Path, rw.code)
+		} else {
+			log.Infof("http response [%s]: code [%d]", r.URL.Path, rw.code)
+		}
 	})
 }

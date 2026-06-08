@@ -605,14 +605,14 @@ func (svr *Service) handleConnection(ctx context.Context, conn net.Conn, interna
 		}
 
 		if err != nil {
-			xl.Warnf("register control error: %v", err)
+			xl.Warnf("register control error: %v, remote: %s", err, conn.RemoteAddr().String())
 			if writeErr := writeWithDeadline(conn, connWriteTimeout, func() error {
 				return acceptedConn.conn.WriteMsg(&msg.LoginResp{
 					Version: version.Full(),
 					Error:   util.GenerateResponseErrorString("register control error", err, lo.FromPtr(svr.cfg.DetailedErrorsToClient)),
 				})
 			}); writeErr != nil {
-				xl.Warnf("write login error response error: %v", writeErr)
+				xl.Warnf("write login error response error: %v, remote: %s", writeErr, conn.RemoteAddr().String())
 			}
 			conn.Close()
 			return
@@ -624,7 +624,7 @@ func (svr *Service) handleConnection(ctx context.Context, conn net.Conn, interna
 				Error:   "",
 			})
 		}); err != nil {
-			xl.Warnf("write login response error: %v", err)
+			xl.Warnf("write login response error: %v, remote: %s", err, conn.RemoteAddr().String())
 			svr.ctlManager.Del(m.RunID, ctl)
 			svr.clientRegistry.MarkOfflineByRunID(m.RunID)
 			conn.Close()
@@ -646,7 +646,7 @@ func (svr *Service) handleConnection(ctx context.Context, conn net.Conn, interna
 		}
 	case *msg.NewVisitorConn:
 		if err = svr.RegisterVisitorConn(conn, m); err != nil {
-			xl.Warnf("register visitor conn error: %v", err)
+			xl.Warnf("register visitor conn error: %v, remote: %s", err, conn.RemoteAddr().String())
 			_ = acceptedConn.conn.WriteMsg(&msg.NewVisitorConnResp{
 				ProxyName: m.ProxyName,
 				Error:     util.GenerateResponseErrorString("register visitor conn error", err, lo.FromPtr(svr.cfg.DetailedErrorsToClient)),
@@ -818,7 +818,8 @@ func (svr *Service) HandleListener(l net.Listener, internal bool) {
 			var isTLS, custom bool
 			c, isTLS, custom, err = netpkg.CheckAndEnableTLSServerConnWithTimeout(c, svr.tlsConfig, forceTLS, connReadTimeout)
 			if err != nil {
-				log.Warnf("checkAndEnableTLSServerConnWithTimeout error: %v", err)
+				// Note: c is nil on error, use originConn which was captured before the call.
+				log.Warnf("checkAndEnableTLSServerConnWithTimeout error: %v, remote: %s", err, originConn.RemoteAddr().String())
 				originConn.Close()
 				continue
 			}
@@ -827,6 +828,20 @@ func (svr *Service) HandleListener(l net.Listener, internal bool) {
 
 		// Start a new goroutine to handle connection.
 		go func(ctx context.Context, frpConn net.Conn) {
+			if tlsConn, ok := frpConn.(*tls.Conn); ok {
+				if err := tlsConn.Handshake(); err != nil {
+					log.Warnf("TLS handshake error: %v, remote: %s", err, frpConn.RemoteAddr().String())
+					frpConn.Close()
+					return
+				}
+				state := tlsConn.ConnectionState()
+				if len(state.PeerCertificates) > 0 {
+					cert := state.PeerCertificates[0]
+					log.Infof("TLS client cert, remote: %s, CN: %s, OU: %v",
+						frpConn.RemoteAddr().String(), cert.Subject.CommonName, cert.Subject.OrganizationalUnit)
+				}
+			}
+
 			if lo.FromPtr(svr.cfg.Transport.TCPMux) && !internal {
 				fmuxCfg := fmux.DefaultConfig()
 				fmuxCfg.KeepAliveInterval = time.Duration(svr.cfg.Transport.TCPMuxKeepaliveInterval) * time.Second
@@ -835,7 +850,7 @@ func (svr *Service) HandleListener(l net.Listener, internal bool) {
 				fmuxCfg.MaxStreamWindowSize = 6 * 1024 * 1024
 				session, err := fmux.Server(frpConn, fmuxCfg)
 				if err != nil {
-					log.Warnf("failed to create mux connection: %v", err)
+					log.Warnf("failed to create mux connection: %v, remote: %s", err, frpConn.RemoteAddr().String())
 					frpConn.Close()
 					return
 				}
@@ -866,6 +881,13 @@ func (svr *Service) HandleQUICListener(l *quic.Listener) {
 		}
 		// Start a new goroutine to handle connection.
 		go func(ctx context.Context, frpConn *quic.Conn) {
+			tlsState := frpConn.ConnectionState().TLS
+			if len(tlsState.PeerCertificates) > 0 {
+				cert := tlsState.PeerCertificates[0]
+				log.Infof("QUIC TLS client cert, remote: %s, CN: %s, OU: %v",
+					frpConn.RemoteAddr().String(), cert.Subject.CommonName, cert.Subject.OrganizationalUnit)
+			}
+
 			for {
 				stream, err := frpConn.AcceptStream(context.Background())
 				if err != nil {
