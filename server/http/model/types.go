@@ -136,6 +136,7 @@ type RelayConnectionInfo struct {
 	SourceIP  string `json:"sourceIP"`
 	Protocol  string `json:"protocol"`
 	Group     string `json:"group"`
+	UserID    string `json:"userID,omitempty"`
 	DstAddr   string `json:"dstAddr"`
 	DstPort   int    `json:"dstPort"`
 	ProxyName string `json:"proxyName"`

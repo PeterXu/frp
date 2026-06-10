@@ -152,6 +152,7 @@ func (svr *Service) apiSocks5RelayConnections(ctx *httppkg.Context) (any, error)
 			SourceIP:  c.SourceIP,
 			Protocol:  c.Protocol,
 			Group:     c.Group,
+			UserID:    c.UserID,
 			DstAddr:   c.DstAddr,
 			DstPort:   int(c.DstPort),
 			ProxyName: c.ProxyName,
