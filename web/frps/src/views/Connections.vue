@@ -70,6 +70,12 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="group" label="Group" width="120" />
+                <el-table-column prop="userID" label="UserID" width="120">
+                  <template #default="{ row }">
+                    <span v-if="row.userID">{{ row.userID }}</span>
+                    <span v-else class="text-muted">-</span>
+                  </template>
+                </el-table-column>
                 <el-table-column label="Destination" width="200">
                   <template #default="{ row }">
                     {{ formatDestination(row.dstAddr, row.dstPort) }}
@@ -119,6 +125,12 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="group" label="Group" width="120" />
+                <el-table-column prop="userID" label="UserID" width="120">
+                  <template #default="{ row }">
+                    <span v-if="row.userID">{{ row.userID }}</span>
+                    <span v-else class="text-muted">-</span>
+                  </template>
+                </el-table-column>
                 <el-table-column label="Destination" width="200">
                   <template #default="{ row }">
                     {{ formatDestination(row.dstAddr, row.dstPort) }}
@@ -552,5 +564,9 @@ html.dark .status-card {
     width: 100%;
     flex-direction: column;
   }
+}
+
+.text-muted {
+  color: var(--el-text-color-secondary);
 }
 </style>

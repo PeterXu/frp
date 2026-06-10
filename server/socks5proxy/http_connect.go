@@ -157,6 +157,7 @@ func (h *HTTPConnectHandler) handleConn(ctx context.Context, conn net.Conn) {
 		SourceIP:  conn.RemoteAddr().String(),
 		Protocol:  "http_connect",
 		Group:     group,
+		UserID:    userID,
 		DstAddr:   host,
 		DstPort:   port,
 		ProxyName: proxyName,

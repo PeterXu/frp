@@ -22,6 +22,7 @@ export interface RelayConnectionInfo {
   sourceIP: string
   protocol: 'socks5' | 'http_connect'
   group: string
+  userID?: string
   dstAddr: string
   dstPort: number
   proxyName: string

@@ -23,6 +23,7 @@ type RelayConnInfo struct {
 	SourceIP  string
 	Protocol  string // "socks5" or "http_connect"
 	Group     string // username (= group name)
+	UserID    string // optional userID for session affinity (empty if not used)
 	DstAddr   string
 	DstPort   uint16
 	ProxyName string
@@ -260,6 +261,7 @@ func (e RelayConnEvent) MarshalJSON() ([]byte, error) {
 			SourceIP  string `json:"sourceIP"`
 			Protocol  string `json:"protocol"`
 			Group     string `json:"group"`
+			UserID    string `json:"userID,omitempty"`
 			DstAddr   string `json:"dstAddr"`
 			DstPort   int    `json:"dstPort"`
 			ProxyName string `json:"proxyName"`
@@ -285,6 +287,7 @@ func (e RelayConnEvent) MarshalJSON() ([]byte, error) {
 	result.Conn.SourceIP = e.Conn.SourceIP
 	result.Conn.Protocol = e.Conn.Protocol
 	result.Conn.Group = e.Conn.Group
+	result.Conn.UserID = e.Conn.UserID
 	result.Conn.DstAddr = e.Conn.DstAddr
 	result.Conn.DstPort = int(e.Conn.DstPort)
 	result.Conn.ProxyName = e.Conn.ProxyName

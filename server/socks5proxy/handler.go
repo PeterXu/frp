@@ -132,6 +132,7 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 		SourceIP:  clientConn.RemoteAddr().String(),
 		Protocol:  "socks5",
 		Group:     group,
+		UserID:    userID,
 		DstAddr:   dstAddr,
 		DstPort:   dstPort,
 		ProxyName: proxyName,
