@@ -139,6 +139,10 @@ func (h *HTTPConnectHandler) handleConn(ctx context.Context, conn net.Conn) {
 	}
 	port := uint16(parsedPort)
 
+	// Log the proxy connection with complete URL
+	xl.Infof("http connect proxy connection: src [%s] group [%s] userID [%s] targetUser [%s], target [http://%s:%d]",
+		conn.RemoteAddr(), group, userID, targetUser, host, port)
+
 	// Select frpc and get work connection
 	workConn, proxyName, runID, err := h.selectFrpcFn(group, userID, targetUser, host, port)
 	if err != nil {

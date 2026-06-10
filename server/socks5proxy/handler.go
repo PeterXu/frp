@@ -99,7 +99,7 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 		return
 	}
 
-	// SOCKS5 auth (username = group[@userID] or group[!targetUser], password = authPassword)
+	// SOCKS5 auth (username = group[@userID] or group[=targetUser], password = authPassword)
 	group, userID, targetUser, err := h.socks5Auth(clientConn)
 	if err != nil {
 		xl.Debugf("socks5 auth error: %v", err)
@@ -112,6 +112,10 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 		xl.Debugf("socks5 connect request error: %v", err)
 		return
 	}
+
+	// Log the proxy connection with complete URL
+	xl.Infof("socks5 proxy connection: src [%s] group [%s] userID [%s] targetUser [%s], target [socks5://%s:%d]",
+		clientConn.RemoteAddr(), group, userID, targetUser, dstAddr, dstPort)
 
 	// Select frpc and get work connection with target address
 	workConn, proxyName, runID, err := h.selectFrpcFn(group, userID, targetUser, dstAddr, dstPort)
