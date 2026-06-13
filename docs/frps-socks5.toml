@@ -155,13 +155,13 @@ auth.token = "12345678"
 # auth.tokenSource.file.path = "/etc/frp/token"
 
 # oidc issuer specifies the issuer to verify OIDC tokens with.
-auth.oidc.issuer = ""
+# auth.oidc.issuer = ""
 # oidc audience specifies the audience OIDC tokens should contain when validated.
-auth.oidc.audience = ""
+# auth.oidc.audience = ""
 # oidc skipExpiryCheck specifies whether to skip checking if the OIDC token is expired.
-auth.oidc.skipExpiryCheck = false
+# auth.oidc.skipExpiryCheck = false
 # oidc skipIssuerCheck specifies whether to skip checking if the OIDC token's issuer claim matches the issuer specified in OidcIssuer.
-auth.oidc.skipIssuerCheck = false
+# auth.oidc.skipIssuerCheck = false
 
 # userConnTimeout specifies the maximum time to wait for a work connection.
 # userConnTimeout = 10
@@ -190,7 +190,7 @@ maxPortsPerClient = 0
 udpPacketSize = 1300
 
 # Retention time for NAT hole punching strategy data.
-natholeAnalysisDataReserveHours = 168
+# natholeAnalysisDataReserveHours = 168
 
 # ssh tunnel gateway
 # If you want to enable this feature, the bindPort parameter is required, while others are optional.

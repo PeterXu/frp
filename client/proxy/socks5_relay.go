@@ -106,7 +106,8 @@ func (pxy *Socks5RelayProxy) InWorkConn(conn net.Conn, m *msg.StartWorkConn) {
 	}
 
 	xl.Debugf("socks5_relay connected to target [%s], bridging", targetAddr)
-	_, _, _ = libio.Join(conn, targetConn)
+	n1, n2, _ := libio.Join(conn, targetConn)
+	xl.Debugf("socks5_relay to target [%s], bytes in=%d out=%d", targetAddr, n1, n2)
 }
 
 func (pxy *Socks5RelayProxy) Close() {
