@@ -502,10 +502,12 @@ maxConcurrent = 3
 # Visitor Configuration Examples
 # ============================================================================
 #
-# Visitors connect to stcp/xtcp/sudp proxy servers through frps.
-# Each visitor binds a local port that applications can connect to.
+# Visitors connect to stcp/xtcp/sudp proxy servers, or to socks5_relay exit
+# nodes, through frps. Each visitor binds a local port that applications
+# connect to.
 #
 # Flow: local app -> visitor:bindPort -> frps -> proxy server -> local service
+# socks5 flow: SOCKS5 client -> socks5 visitor -> frps -> socks5_relay -> target
 
 # --- stcp visitor: connect to an stcp proxy via frps ---------------------------
 #[[visitors]]
@@ -553,6 +555,30 @@ maxConcurrent = 3
 #secretKey = "abcdefg"
 #bindAddr = "127.0.0.1"
 #bindPort = 9002
+
+# --- socks5 visitor: local SOCKS5 entry forwarded to a socks5_relay exit -------
+# Moves the SOCKS5 entry point off the public frps and onto this trusted frpc;
+# frps only relays. The targeted exit node is a `socks5_relay` proxy on another
+# frpc, selected by group/user membership (same routing as frps's socks5 proxy).
+#
+# Chain: SOCKS5 client -> this frpc (socks5 visitor) -> frps -> frpc2 (socks5_relay) -> target
+#
+# authPassword authenticates the SOCKS5 client <-> frpc hop (required).
+# Routing is taken from the SOCKS5 username:
+#   group              -> round-robin across group members
+#   group@userID       -> session affinity (sticky to one frpc2)
+#   group=targetUser   -> direct targeting (pin to a specific frpc2)
+# When the SOCKS5 client supplies no username, serverName (and optional
+# serverUser) are used as a static fallback.
+#[[visitors]]
+#name = "socks5_entry"
+#type = "socks5"
+#bindAddr = "127.0.0.1"
+#bindPort = 1080
+#authPassword = "shared-secret"
+# serverName = "group"    # static fallback group when SOCKS5 username is empty
+# serverUser = "host-b"   # optional: pin to a specific frpc2 (direct targeting)
+# maxConcurrent = 50      # optional: cap concurrent SOCKS5 client conns (0 = unlimited)
 
 # --- plugin: virtual_net visitor — join virtual network ------------------------
 #[[visitors]]

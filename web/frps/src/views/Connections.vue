@@ -64,8 +64,8 @@
                 <el-table-column prop="sourceIP" label="Source" width="180" />
                 <el-table-column prop="protocol" label="Protocol" width="130">
                   <template #default="{ row }">
-                    <el-tag :type="row.protocol === 'socks5' ? 'primary' : 'success'" size="small">
-                      {{ row.protocol === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT' }}
+                    <el-tag :type="protocolTagType(row.protocol, true)" size="small">
+                      {{ protocolLabel(row.protocol) }}
                     </el-tag>
                   </template>
                 </el-table-column>
@@ -119,8 +119,8 @@
                 <el-table-column prop="sourceIP" label="Source" width="180" />
                 <el-table-column prop="protocol" label="Protocol" width="130">
                   <template #default="{ row }">
-                    <el-tag :type="row.protocol === 'socks5' ? 'info' : 'warning'" size="small">
-                      {{ row.protocol === 'socks5' ? 'SOCKS5' : 'HTTP CONNECT' }}
+                    <el-tag :type="protocolTagType(row.protocol, false)" size="small">
+                      {{ protocolLabel(row.protocol) }}
                     </el-tag>
                   </template>
                 </el-table-column>
@@ -258,6 +258,20 @@ const connectionStats = computed(() => {
     totalBytesOut: allConnections.value.reduce((sum, c) => sum + c.bytesOut, 0),
   }
 })
+
+const protocolLabel = (protocol: string): string => {
+  if (protocol === 'socks5') return 'SOCKS5'
+  if (protocol === 'socks5_visitor') return 'SOCKS5 VISITOR'
+  return 'HTTP CONNECT'
+}
+
+// Tag color palette differs between the active tab (primary/success) and the
+// recent tab (info/warning); `active` selects which palette to draw from.
+const protocolTagType = (protocol: string, active: boolean): string => {
+  if (protocol === 'socks5') return active ? 'primary' : 'info'
+  if (protocol === 'socks5_visitor') return active ? 'success' : 'warning'
+  return active ? 'success' : 'warning'
+}
 
 const formatDuration = (startTime: number, endTime: number | null): string => {
   const start = startTime * 1000

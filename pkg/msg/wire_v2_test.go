@@ -65,6 +65,8 @@ func TestV2MessageTypeIDsAreStable(t *testing.T) {
 	require.Equal(t, uint16(16), V2TypeNatHoleResp)
 	require.Equal(t, uint16(17), V2TypeNatHoleSid)
 	require.Equal(t, uint16(18), V2TypeNatHoleReport)
+	require.Equal(t, uint16(25), V2TypeNewSocks5VisitorConn)
+	require.Equal(t, uint16(26), V2TypeNewSocks5VisitorConnResp)
 }
 
 func TestV2MessageFrameEncoding(t *testing.T) {
@@ -118,4 +120,28 @@ func TestDecodeV2MessageFrameIntoRejectsWrongTarget(t *testing.T) {
 func TestEncodeV2MessageFrameRejectsUnknownMessage(t *testing.T) {
 	_, err := EncodeV2MessageFrame(struct{}{})
 	require.ErrorContains(t, err, "unknown v2 message type")
+}
+
+func TestV2Socks5VisitorConnRoundTrip(t *testing.T) {
+	in := &NewSocks5VisitorConn{
+		RunID: "rid", Group: "dev", UserID: "u", TargetUser: "",
+		DstAddr: "www.baidu.com", DstPort: 443, AuthPassword: "pass",
+	}
+	frame, err := EncodeV2MessageFrame(in)
+	require.NoError(t, err)
+
+	out, err := DecodeV2MessageFrame(frame)
+	require.NoError(t, err)
+	require.Equal(t, in, out)
+
+	var into NewSocks5VisitorConn
+	require.NoError(t, DecodeV2MessageFrameInto(frame, &into))
+	require.Equal(t, *in, into)
+
+	// Resp round-trips too.
+	respFrame, err := EncodeV2MessageFrame(&NewSocks5VisitorConnResp{Error: ""})
+	require.NoError(t, err)
+	var resp NewSocks5VisitorConnResp
+	require.NoError(t, DecodeV2MessageFrameInto(respFrame, &resp))
+	require.Equal(t, "", resp.Error)
 }

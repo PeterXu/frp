@@ -81,7 +81,13 @@ transport.tcpMux = true
 # If tcpmuxPassthrough is true, frps won't do any update on traffic.
 # tcpmuxPassthrough = false
 
-# SOCKS5 proxy listener port, 0 means disabled
+# SOCKS5 proxy listener port, 0 means disabled.
+# This is frps's public SOCKS5 entry point. It is OPTIONAL: the socks5 visitor
+# (frpc type "socks5") provides an alternative entry that lives on a trusted
+# frpc and only relays through frps — in that mode socks5ProxyPort can stay 0.
+# socks5_relay proxies no longer require socks5ProxyPort or httpConnectProxyPort
+# to be set; at least one is needed only when clients connect to frps directly
+# as a SOCKS5/HTTP-CONNECT proxy.
 socks5ProxyPort = 1081
 socks5ProxyAuthPassword = "pass"
 
@@ -94,7 +100,7 @@ httpConnectProxyAuthPassword = "pass"
 # maxProxyConnections = 10000
 
 # Retention time for closed connections display in dashboard (default: 600 = 10 minutes)
-# connRetentionDuration = 600
+connRetentionDuration = 600
 
 # Persistent state database for SOCKS5 client disable/enable feature.
 stateFile = "/var/lib/frp/state.db"

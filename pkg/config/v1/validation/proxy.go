@@ -250,9 +250,6 @@ func validateSUDPProxyConfigForServer(c *v1.SUDPProxyConfig, s *v1.ServerConfig)
 }
 
 func validateSocks5RelayProxyConfigForServer(c *v1.Socks5RelayProxyConfig, s *v1.ServerConfig) error {
-	if s.Socks5ProxyPort == 0 && s.HTTPConnectProxyPort == 0 {
-		return fmt.Errorf("type [socks5_relay] requires socks5ProxyPort or httpConnectProxyPort to be set on server")
-	}
 	return nil
 }
 

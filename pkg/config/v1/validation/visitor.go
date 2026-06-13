@@ -33,8 +33,17 @@ func ValidateVisitorConfigurer(c v1.VisitorConfigurer) error {
 	case *v1.SUDPVisitorConfig:
 	case *v1.XTCPVisitorConfig:
 		return validateXTCPVisitorConfig(v)
+	case *v1.Socks5VisitorConfig:
+		return validateSocks5VisitorConfig(v)
 	default:
 		return errors.New("unknown visitor config type")
+	}
+	return nil
+}
+
+func validateSocks5VisitorConfig(c *v1.Socks5VisitorConfig) error {
+	if c.AuthPassword == "" {
+		return errors.New("authPassword is required")
 	}
 	return nil
 }

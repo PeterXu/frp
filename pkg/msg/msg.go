@@ -39,39 +39,43 @@ const (
 	TypeNatHoleSid         byte = '5'
 	TypeNatHoleReport      byte = '6'
 
-	TypeGetClientConfig     byte = 'g'
-	TypeGetClientConfigResp byte = '7'
-	TypeReqClientMetrics    byte = '8'
-	TypeClientMetricsResp   byte = '9'
-	TypeReqClientExit       byte = 'e'
-	TypeClientExitResp      byte = 'E'
+	TypeGetClientConfig          byte = 'g'
+	TypeGetClientConfigResp      byte = '7'
+	TypeReqClientMetrics         byte = '8'
+	TypeClientMetricsResp        byte = '9'
+	TypeReqClientExit            byte = 'e'
+	TypeClientExitResp           byte = 'E'
+	TypeNewSocks5VisitorConn     byte = 'V'
+	TypeNewSocks5VisitorConnResp byte = 'Y'
 )
 
 var msgTypeMap = map[byte]any{
-	TypeLogin:               Login{},
-	TypeLoginResp:           LoginResp{},
-	TypeNewProxy:            NewProxy{},
-	TypeNewProxyResp:        NewProxyResp{},
-	TypeCloseProxy:          CloseProxy{},
-	TypeNewWorkConn:         NewWorkConn{},
-	TypeReqWorkConn:         ReqWorkConn{},
-	TypeStartWorkConn:       StartWorkConn{},
-	TypeNewVisitorConn:      NewVisitorConn{},
-	TypeNewVisitorConnResp:  NewVisitorConnResp{},
-	TypePing:                Ping{},
-	TypePong:                Pong{},
-	TypeUDPPacket:           UDPPacket{},
-	TypeNatHoleVisitor:      NatHoleVisitor{},
-	TypeNatHoleClient:       NatHoleClient{},
-	TypeNatHoleResp:         NatHoleResp{},
-	TypeNatHoleSid:          NatHoleSid{},
-	TypeNatHoleReport:       NatHoleReport{},
-	TypeGetClientConfig:     GetClientConfig{},
-	TypeGetClientConfigResp: GetClientConfigResp{},
-	TypeReqClientMetrics:    ReqClientMetrics{},
-	TypeClientMetricsResp:   ClientMetricsResp{},
-	TypeReqClientExit:       ReqClientExit{},
-	TypeClientExitResp:      ClientExitResp{},
+	TypeLogin:                    Login{},
+	TypeLoginResp:                LoginResp{},
+	TypeNewProxy:                 NewProxy{},
+	TypeNewProxyResp:             NewProxyResp{},
+	TypeCloseProxy:               CloseProxy{},
+	TypeNewWorkConn:              NewWorkConn{},
+	TypeReqWorkConn:              ReqWorkConn{},
+	TypeStartWorkConn:            StartWorkConn{},
+	TypeNewVisitorConn:           NewVisitorConn{},
+	TypeNewVisitorConnResp:       NewVisitorConnResp{},
+	TypePing:                     Ping{},
+	TypePong:                     Pong{},
+	TypeUDPPacket:                UDPPacket{},
+	TypeNatHoleVisitor:           NatHoleVisitor{},
+	TypeNatHoleClient:            NatHoleClient{},
+	TypeNatHoleResp:              NatHoleResp{},
+	TypeNatHoleSid:               NatHoleSid{},
+	TypeNatHoleReport:            NatHoleReport{},
+	TypeGetClientConfig:          GetClientConfig{},
+	TypeGetClientConfigResp:      GetClientConfigResp{},
+	TypeReqClientMetrics:         ReqClientMetrics{},
+	TypeClientMetricsResp:        ClientMetricsResp{},
+	TypeReqClientExit:            ReqClientExit{},
+	TypeClientExitResp:           ClientExitResp{},
+	TypeNewSocks5VisitorConn:     NewSocks5VisitorConn{},
+	TypeNewSocks5VisitorConnResp: NewSocks5VisitorConnResp{},
 }
 
 var TypeNameNatHoleResp = reflect.TypeFor[NatHoleResp]().Name()

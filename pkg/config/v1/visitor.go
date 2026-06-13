@@ -73,15 +73,17 @@ type VisitorConfigurer interface {
 type VisitorType string
 
 const (
-	VisitorTypeSTCP VisitorType = "stcp"
-	VisitorTypeXTCP VisitorType = "xtcp"
-	VisitorTypeSUDP VisitorType = "sudp"
+	VisitorTypeSTCP   VisitorType = "stcp"
+	VisitorTypeXTCP   VisitorType = "xtcp"
+	VisitorTypeSUDP   VisitorType = "sudp"
+	VisitorTypeSocks5 VisitorType = "socks5"
 )
 
 var visitorConfigTypeMap = map[VisitorType]reflect.Type{
-	VisitorTypeSTCP: reflect.TypeFor[STCPVisitorConfig](),
-	VisitorTypeXTCP: reflect.TypeFor[XTCPVisitorConfig](),
-	VisitorTypeSUDP: reflect.TypeFor[SUDPVisitorConfig](),
+	VisitorTypeSTCP:   reflect.TypeFor[STCPVisitorConfig](),
+	VisitorTypeXTCP:   reflect.TypeFor[XTCPVisitorConfig](),
+	VisitorTypeSUDP:   reflect.TypeFor[SUDPVisitorConfig](),
+	VisitorTypeSocks5: reflect.TypeFor[Socks5VisitorConfig](),
 }
 
 type TypedVisitorConfig struct {
@@ -167,5 +169,32 @@ func (c *XTCPVisitorConfig) Clone() VisitorConfigurer {
 	out := *c
 	out.VisitorBaseConfig = c.VisitorBaseConfig.Clone()
 	out.NatTraversal = c.NatTraversal.Clone()
+	return &out
+}
+
+var _ VisitorConfigurer = &Socks5VisitorConfig{}
+
+// Socks5VisitorConfig configures a frpc1-side SOCKS5 listener whose accepted
+// connections are forwarded to a frpc2 socks5_relay proxy via frps.
+//
+// The SOCKS5 client ↔ frpc1 hop is authenticated with AuthPassword (constant
+// time comparison). The SOCKS5 username carries the routing group (and
+// optional @userID / =targetUser suffix). When the SOCKS5 username is empty,
+// ServerName (and optional ServerUser) act as a static fallback.
+type Socks5VisitorConfig struct {
+	VisitorBaseConfig
+
+	// AuthPassword is the password presented by the SOCKS5 client on the
+	// local listener. Required.
+	AuthPassword string `json:"authPassword,omitempty"`
+
+	// MaxConcurrent caps the number of simultaneous SOCKS5 client
+	// connections accepted by this visitor. 0 = unlimited.
+	MaxConcurrent int `json:"maxConcurrent,omitempty"`
+}
+
+func (c *Socks5VisitorConfig) Clone() VisitorConfigurer {
+	out := *c
+	out.VisitorBaseConfig = c.VisitorBaseConfig.Clone()
 	return &out
 }

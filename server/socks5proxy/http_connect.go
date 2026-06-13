@@ -24,6 +24,7 @@ import (
 
 	libio "github.com/fatedier/golib/io"
 
+	"github.com/fatedier/frp/pkg/util/socks5"
 	"github.com/fatedier/frp/pkg/util/xlog"
 )
 
@@ -246,7 +247,7 @@ func (h *HTTPConnectHandler) extractAuth(req *http.Request) (group, userID, targ
 		return "", "", "", fmt.Errorf("auth failed")
 	}
 
-	group, userID, targetUser, err = parseGroupUserID(parts[0])
+	group, userID, targetUser, err = socks5.ParseGroupUserID(parts[0])
 	if err != nil {
 		return "", "", "", err
 	}
