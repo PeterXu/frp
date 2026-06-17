@@ -56,46 +56,65 @@ func ParseGroupUserID(username string) (group, userID, targetUser string, err er
 }
 
 // Handshake performs the SOCKS5 greeting: reads version + methods list from the
-// client, requires username/password auth (0x02) to be offered, and replies with
-// the server's method selection (0x02). Returns error if the client does not
-// offer 0x02, or if the read fails.
-func Handshake(conn net.Conn) error {
+// client, and selects an authentication method.
+// If allowNoAuth is true and client offers method 0x00 (no auth), it is selected.
+// Otherwise, method 0x02 (username/password) is required.
+// Returns the selected method (0x00 or 0x02), or error if no acceptable method.
+func Handshake(conn net.Conn, allowNoAuth bool) (method byte, err error) {
 	buf := make([]byte, 2)
 	if _, err := io.ReadFull(conn, buf); err != nil {
-		return fmt.Errorf("read version/method selection: %w", err)
+		return 0, fmt.Errorf("read version/method selection: %w", err)
 	}
 	if buf[0] != 0x05 {
-		return fmt.Errorf("not SOCKS5 protocol")
+		return 0, fmt.Errorf("not SOCKS5 protocol")
 	}
 	nMethods := int(buf[1])
 	methods := make([]byte, nMethods)
 	if _, err := io.ReadFull(conn, methods); err != nil {
-		return fmt.Errorf("read methods: %w", err)
+		return 0, fmt.Errorf("read methods: %w", err)
 	}
 
+	hasNoAuth := false
 	hasUserPassAuth := false
 	for _, m := range methods {
+		if m == 0x00 {
+			hasNoAuth = true
+		}
 		if m == 0x02 {
 			hasUserPassAuth = true
-			break
 		}
 	}
 
-	if !hasUserPassAuth {
-		conn.Write([]byte{0x05, 0xFF})
-		conn.Close()
-		return fmt.Errorf("client does not support username/password auth")
+	// Prefer method 0x02 (username/password) to obtain routing info (group).
+	// Only fall back to no-auth (0x00) when client does not support 0x02 and
+	// allowNoAuth is true (for clients without username like "curl -x socks5h://host:port").
+	if hasUserPassAuth {
+		conn.Write([]byte{0x05, 0x02})
+		return 0x02, nil
 	}
 
-	conn.Write([]byte{0x05, 0x02})
-	return nil
+	if allowNoAuth && hasNoAuth {
+		conn.Write([]byte{0x05, 0x00})
+		return 0x00, nil
+	}
+
+	conn.Write([]byte{0x05, 0xFF})
+	conn.Close()
+	return 0, fmt.Errorf("client does not support username/password auth")
 }
 
-// Authenticate performs SOCKS5 username/password authentication. Username format
-// follows ParseGroupUserID. expectedPassword is compared in constant time.
-// Returns parsed group, userID, targetUser. Sends the appropriate auth reply
-// (success 0x01 0x00 or failure 0x01 0x01) to the client.
-func Authenticate(conn net.Conn, expectedPassword string) (group, userID, targetUser string, err error) {
+// Authenticate performs SOCKS5 authentication based on the selected method.
+// For method 0x00 (no auth), it returns empty values immediately.
+// For method 0x02 (username/password), it reads credentials and validates the password.
+// When expectedPassword is empty, accepts empty password only (client must also send empty password).
+// Username format follows ParseGroupUserID. Non-empty expectedPassword is compared in constant time.
+// Returns parsed group, userID, targetUser. For method 0x02, sends the appropriate
+// auth reply (success 0x01 0x00 or failure 0x01 0x01) to the client.
+func Authenticate(conn net.Conn, method byte, expectedPassword string) (group, userID, targetUser string, err error) {
+	// No authentication - skip auth phase entirely
+	if method == 0x00 {
+		return "", "", "", nil
+	}
 	buf := make([]byte, 2)
 	if _, err := io.ReadFull(conn, buf); err != nil {
 		return "", "", "", fmt.Errorf("read auth version: %w", err)
@@ -116,9 +135,18 @@ func Authenticate(conn net.Conn, expectedPassword string) (group, userID, target
 		return "", "", "", fmt.Errorf("read password: %w", err)
 	}
 
-	if subtle.ConstantTimeCompare(password, []byte(expectedPassword)) != 1 {
-		conn.Write([]byte{0x01, 0x01})
-		return "", "", "", fmt.Errorf("auth failed for user [%s]", string(username))
+	// Validate password
+	if expectedPassword == "" {
+		// When expectedPassword is empty, accept empty password only
+		if len(password) != 0 {
+			conn.Write([]byte{0x01, 0x01})
+			return "", "", "", fmt.Errorf("auth failed: expected empty password but got non-empty for user [%s]", string(username))
+		}
+	} else {
+		if subtle.ConstantTimeCompare(password, []byte(expectedPassword)) != 1 {
+			conn.Write([]byte{0x01, 0x01})
+			return "", "", "", fmt.Errorf("auth failed for user [%s]", string(username))
+		}
 	}
 
 	conn.Write([]byte{0x01, 0x00})

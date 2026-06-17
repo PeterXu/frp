@@ -42,9 +42,9 @@ func ValidateVisitorConfigurer(c v1.VisitorConfigurer) error {
 }
 
 func validateSocks5VisitorConfig(c *v1.Socks5VisitorConfig) error {
-	if c.AuthPassword == "" {
-		return errors.New("authPassword is required")
-	}
+	// authPassword can be empty. When empty, no-auth method (0x00) is allowed
+	// during SOCKS5 handshake, and empty password is sent to frps (for forward
+	// compatibility only; frpc2 currently does not verify it).
 	return nil
 }
 

@@ -72,12 +72,16 @@ func (sv *Socks5Visitor) handleConn(userConn net.Conn) {
 	// Stagger the handshake phase to prevent slowloris.
 	userConn.SetDeadline(time.Now().Add(socks5VisitorHandshakeTimeout))
 
-	if err := socks5.Handshake(userConn); err != nil {
+	// When AuthPassword is empty, allow no-auth method for curl compatibility.
+	allowNoAuth := sv.cfg.AuthPassword == ""
+
+	method, err := socks5.Handshake(userConn, allowNoAuth)
+	if err != nil {
 		xl.Debugf("socks5 handshake error: %v", err)
 		return
 	}
 
-	group, userID, targetUser, err := socks5.Authenticate(userConn, sv.cfg.AuthPassword)
+	group, userID, targetUser, err := socks5.Authenticate(userConn, method, sv.cfg.AuthPassword)
 	if err != nil {
 		xl.Debugf("socks5 auth error: %v", err)
 		return

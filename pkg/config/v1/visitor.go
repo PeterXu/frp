@@ -185,7 +185,7 @@ type Socks5VisitorConfig struct {
 	VisitorBaseConfig
 
 	// AuthPassword is the password presented by the SOCKS5 client on the
-	// local listener. Required.
+	// local listener. Can be empty for no-password authentication.
 	AuthPassword string `json:"authPassword,omitempty"`
 
 	// MaxConcurrent caps the number of simultaneous SOCKS5 client

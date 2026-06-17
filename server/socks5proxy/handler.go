@@ -91,13 +91,14 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 	clientConn.SetDeadline(time.Now().Add(socks5HandshakeTimeout))
 
 	// SOCKS5 handshake
-	if err := socks5.Handshake(clientConn); err != nil {
+	method, err := socks5.Handshake(clientConn, false)
+	if err != nil {
 		xl.Debugf("socks5 handshake error: %v", err)
 		return
 	}
 
 	// SOCKS5 auth (username = group[@userID] or group[=targetUser], password = authPassword)
-	group, userID, targetUser, err := socks5.Authenticate(clientConn, h.authPassword)
+	group, userID, targetUser, err := socks5.Authenticate(clientConn, method, h.authPassword)
 	if err != nil {
 		xl.Debugf("socks5 auth error: %v", err)
 		return
