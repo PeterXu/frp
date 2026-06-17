@@ -9,11 +9,14 @@
 package proxy
 
 import (
+	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	libio "github.com/fatedier/golib/io"
@@ -21,6 +24,7 @@ import (
 
 	v1 "github.com/fatedier/frp/pkg/config/v1"
 	"github.com/fatedier/frp/pkg/msg"
+	"github.com/fatedier/frp/pkg/util/tlsfingerprint"
 	"github.com/fatedier/frp/pkg/util/util"
 )
 
@@ -115,10 +119,19 @@ func (pxy *Socks5RelayProxy) Close() {
 }
 
 // dialViaProxyURL dials the target address through the specified proxy URL.
+// For HTTPS proxies, uses TLS fingerprint simulation if configured.
 func (pxy *Socks5RelayProxy) dialViaProxyURL(targetAddr string, proxyURL string) (net.Conn, error) {
 	proxyType, addr, auth, err := libnet.ParseProxyURL(proxyURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse proxy URL %q error: %w", proxyURL, err)
+	}
+
+	// Check if proxy is HTTPS (needs TLS connection to proxy)
+	isHTTPSProxy := strings.HasPrefix(proxyURL, "https://")
+
+	if isHTTPSProxy && pxy.cfg.TLSFingerprint != "" {
+		// Use custom TLS fingerprint for HTTPS proxy connection
+		return pxy.dialViaHTTPSProxyWithFingerprint(targetAddr, addr, auth)
 	}
 
 	return libnet.Dial(targetAddr,
@@ -126,4 +139,59 @@ func (pxy *Socks5RelayProxy) dialViaProxyURL(targetAddr string, proxyURL string)
 		libnet.WithProxy(proxyType, addr),
 		libnet.WithProxyAuth(auth),
 	)
+}
+
+// dialViaHTTPSProxyWithFingerprint connects to HTTPS proxy with TLS fingerprint simulation.
+func (pxy *Socks5RelayProxy) dialViaHTTPSProxyWithFingerprint(targetAddr, proxyAddr string, auth *libnet.ProxyAuth) (net.Conn, error) {
+	xl := pxy.xl
+
+	// Step 1: TCP connect to proxy
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	conn, err := dialer.Dial("tcp", proxyAddr)
+	if err != nil {
+		return nil, fmt.Errorf("connect to HTTPS proxy %s: %w", proxyAddr, err)
+	}
+
+	// Step 2: TLS handshake with fingerprint
+	profile := tlsfingerprint.GetProfile(pxy.cfg.TLSFingerprint)
+	if profile == nil {
+		profile = tlsfingerprint.GetProfile("chrome") // fallback to chrome
+	}
+
+	tlsConn, err := tlsfingerprint.PerformTLSHandshake(context.Background(), conn, profile, proxyAddr)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("TLS handshake with proxy %s: %w", proxyAddr, err)
+	}
+	xl.Debugf("socks5_relay connected to HTTPS proxy [%s] with fingerprint [%s]", proxyAddr, pxy.cfg.TLSFingerprint)
+
+	// Step 3: Send CONNECT request
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\rHost: %s\r", targetAddr, targetAddr)
+	if auth != nil && auth.Username != "" {
+		credentials := base64.StdEncoding.EncodeToString([]byte(auth.Username + ":" + auth.Passwd))
+		connectReq += fmt.Sprintf("Proxy-Authorization: Basic %s\r", credentials)
+	}
+	connectReq += "\r"
+
+	if _, err := tlsConn.Write([]byte(connectReq)); err != nil {
+		tlsConn.Close()
+		return nil, fmt.Errorf("write CONNECT request: %w", err)
+	}
+
+	// Step 4: Read CONNECT response (simplified - just check for 200)
+	buf := make([]byte, 1024)
+	n, err := tlsConn.Read(buf)
+	if err != nil {
+		tlsConn.Close()
+		return nil, fmt.Errorf("read CONNECT response: %w", err)
+	}
+
+	resp := string(buf[:n])
+	if !strings.Contains(resp, "200") {
+		tlsConn.Close()
+		return nil, fmt.Errorf("proxy CONNECT failed: %s", resp)
+	}
+
+	xl.Debugf("socks5_relay HTTPS proxy tunnel established to [%s]", targetAddr)
+	return tlsConn, nil
 }

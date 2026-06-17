@@ -545,6 +545,10 @@ type Socks5RelayProxyConfig struct {
 	// When limit is reached, new requests will wait (block) until a token becomes available.
 	// Default is 0 (unlimited). Recommended range: 3-10 for typical usage.
 	MaxConcurrent int `json:"maxConcurrent,omitempty"`
+	// TLSFingerprint specifies the TLS fingerprint to use when connecting to HTTPS targets.
+	// Available presets: "chrome", "firefox", "safari", "node".
+	// Empty string means use default Go TLS (no fingerprint simulation).
+	TLSFingerprint string `json:"tlsFingerprint,omitempty"`
 }
 
 func (c *Socks5RelayProxyConfig) MarshalToMsg(m *msg.NewProxy) {
