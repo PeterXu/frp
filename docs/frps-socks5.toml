@@ -97,7 +97,7 @@ httpConnectProxyAuthPassword = "pass"
 
 # Maximum concurrent connections on the SOCKS5/HTTP CONNECT proxy ports.
 # New connections are blocked until a slot is freed. 0 = unlimited.
-# maxProxyConnections = 10000
+maxProxyConnections = 0
 
 # Retention time for closed connections display in dashboard (default: 600 = 10 minutes)
 connRetentionDuration = 600

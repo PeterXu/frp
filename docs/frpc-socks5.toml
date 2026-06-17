@@ -495,7 +495,7 @@ type = "socks5_relay"
 # outboundProxy = "optional-outbound-proxy-name"
 # Token pool size: requests wait (block) when limit reached until a token is released
 # 0 = unlimited, recommended: 3-10 for typical usage
-maxConcurrent = 3
+maxConcurrent = 30
 
 
 # ============================================================================
