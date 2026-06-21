@@ -119,8 +119,8 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 	workConn, proxyName, runID, err := h.selectFrpcFn(group, userID, targetUser, dstAddr, dstPort)
 	if err != nil {
 		xl.Warnf("select frpc for group [%s] error: %v", group, err)
-		clientConn.SetDeadline(time.Time{}) // clear deadline so error reply can be sent
-		socks5.SendReply(clientConn, 0x01)  // general SOCKS server failure
+		clientConn.SetDeadline(time.Time{})    // clear deadline so error reply can be sent
+		_ = socks5.SendReply(clientConn, 0x01) // general SOCKS server failure (best-effort)
 		return
 	}
 	defer workConn.Close()
@@ -157,8 +157,11 @@ func (h *SOCKS5Handler) handleConn(ctx context.Context, clientConn net.Conn) {
 	// Clear deadline before sending reply — selectFrpcFn retries may have consumed most of it
 	clientConn.SetDeadline(time.Time{})
 
-	// Send success reply to client
-	socks5.SendReply(clientConn, 0x00)
+	// Send success reply to client; abort relaying if it never reached the client.
+	if err := socks5.SendReply(clientConn, 0x00); err != nil {
+		xl.Debugf("send success reply: %v", err)
+		return
+	}
 
 	// Bridge traffic
 	_, _, errs := libio.Join(clientConn, workConn)

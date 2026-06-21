@@ -9,10 +9,14 @@
 package proxy
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
+	"net/url"
 	"os"
 	"reflect"
 	"strconv"
@@ -123,7 +127,7 @@ func (pxy *Socks5RelayProxy) Close() {
 func (pxy *Socks5RelayProxy) dialViaProxyURL(targetAddr string, proxyURL string) (net.Conn, error) {
 	proxyType, addr, auth, err := libnet.ParseProxyURL(proxyURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse proxy URL %q error: %w", proxyURL, err)
+		return nil, fmt.Errorf("parse proxy URL %s error: %w", redactProxyURL(proxyURL), err)
 	}
 
 	// Check if proxy is HTTPS (needs TLS connection to proxy)
@@ -152,46 +156,121 @@ func (pxy *Socks5RelayProxy) dialViaHTTPSProxyWithFingerprint(targetAddr, proxyA
 		return nil, fmt.Errorf("connect to HTTPS proxy %s: %w", proxyAddr, err)
 	}
 
-	// Step 2: TLS handshake with fingerprint
+	// Step 2: TLS handshake with fingerprint.
+	// Bound the handshake so a slow/hung proxy cannot stall this goroutine (which
+	// holds a maxConcurrent token slot) indefinitely.
 	profile := tlsfingerprint.GetProfile(pxy.cfg.TLSFingerprint)
 	if profile == nil {
 		profile = tlsfingerprint.GetProfile("chrome") // fallback to chrome
 	}
 
-	tlsConn, err := tlsfingerprint.PerformTLSHandshake(context.Background(), conn, profile, proxyAddr)
+	handshakeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tlsConn, err := tlsfingerprint.PerformTLSHandshake(handshakeCtx, conn, profile, proxyAddr)
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("TLS handshake with proxy %s: %w", proxyAddr, err)
 	}
 	xl.Debugf("socks5_relay connected to HTTPS proxy [%s] with fingerprint [%s]", proxyAddr, pxy.cfg.TLSFingerprint)
 
-	// Step 3: Send CONNECT request
-	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\rHost: %s\r", targetAddr, targetAddr)
+	// Step 3: Send CONNECT request (HTTP/1.1 requires CRLF line terminators).
+	var connectReq strings.Builder
+	fmt.Fprintf(&connectReq, "CONNECT %s HTTP/1.1\r\n", targetAddr)
+	fmt.Fprintf(&connectReq, "Host: %s\r\n", targetAddr)
 	if auth != nil && auth.Username != "" {
 		credentials := base64.StdEncoding.EncodeToString([]byte(auth.Username + ":" + auth.Passwd))
-		connectReq += fmt.Sprintf("Proxy-Authorization: Basic %s\r", credentials)
+		fmt.Fprintf(&connectReq, "Proxy-Authorization: Basic %s\r\n", credentials)
 	}
-	connectReq += "\r"
+	connectReq.WriteString("\r\n")
 
-	if _, err := tlsConn.Write([]byte(connectReq)); err != nil {
+	if _, err := tlsConn.Write([]byte(connectReq.String())); err != nil {
 		tlsConn.Close()
 		return nil, fmt.Errorf("write CONNECT request: %w", err)
 	}
 
-	// Step 4: Read CONNECT response (simplified - just check for 200)
-	buf := make([]byte, 1024)
-	n, err := tlsConn.Read(buf)
+	// Step 4: Read the CONNECT response. Use a bufio.Reader so we consume exactly
+	// the response headers even when they arrive across multiple TLS records, and
+	// so any bytes buffered past the headers (belonging to the tunnel) are preserved.
+	reader := bufio.NewReader(tlsConn)
+	code, err := readConnectResponse(reader)
 	if err != nil {
 		tlsConn.Close()
-		return nil, fmt.Errorf("read CONNECT response: %w", err)
+		return nil, err
+	}
+	if code < 200 || code >= 300 {
+		tlsConn.Close()
+		return nil, fmt.Errorf("proxy CONNECT failed with status %d", code)
 	}
 
-	resp := string(buf[:n])
-	if !strings.Contains(resp, "200") {
-		tlsConn.Close()
-		return nil, fmt.Errorf("proxy CONNECT failed: %s", resp)
+	// A well-behaved proxy sends only headers then waits, so there is normally
+	// nothing buffered. Guard anyway: tunnel bytes already received must be
+	// served before reading fresh data from the connection.
+	if n := reader.Buffered(); n > 0 {
+		peeked, err := reader.Peek(n)
+		if err != nil {
+			tlsConn.Close()
+			return nil, fmt.Errorf("read CONNECT response leftover: %w", err)
+		}
+		return &prefixedConn{
+			Reader: io.MultiReader(bytes.NewReader(append([]byte(nil), peeked...)), tlsConn),
+			Conn:   tlsConn,
+		}, nil
 	}
 
 	xl.Debugf("socks5_relay HTTPS proxy tunnel established to [%s]", targetAddr)
 	return tlsConn, nil
+}
+
+// readConnectResponse reads the HTTP CONNECT response from r up to the end of the
+// header block (a blank line) and returns the parsed status code. It handles
+// responses delivered across multiple reads and rejects oversized/ malformed ones.
+func readConnectResponse(r *bufio.Reader) (int, error) {
+	const maxHeaderBytes = 1 << 16 // 64 KiB safety bound
+	var statusLine string
+	var total int
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return 0, fmt.Errorf("read CONNECT response: %w", err)
+		}
+		if statusLine == "" {
+			statusLine = line
+		}
+		total += len(line)
+		if total > maxHeaderBytes {
+			return 0, fmt.Errorf("CONNECT response headers too large")
+		}
+		// Blank line (CRLF or LF) marks the end of the header block.
+		if strings.TrimRight(line, "\r\n") == "" {
+			break
+		}
+	}
+	fields := strings.Fields(statusLine)
+	if len(fields) < 2 {
+		return 0, fmt.Errorf("malformed CONNECT status line: %q", strings.TrimSpace(statusLine))
+	}
+	code, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return 0, fmt.Errorf("malformed CONNECT status code %q: %w", fields[1], err)
+	}
+	return code, nil
+}
+
+// prefixedConn serves buffered bytes (the CONNECT response leftover) before
+// delegating reads to the underlying connection.
+type prefixedConn struct {
+	io.Reader
+	net.Conn
+}
+
+func (c *prefixedConn) Read(p []byte) (int, error) { return c.Reader.Read(p) }
+
+// redactProxyURL masks any embedded password so proxy URLs can be safely included
+// in error messages and logs. Falls back to the raw string if it can't be parsed.
+func redactProxyURL(s string) string {
+	u, err := url.Parse(s)
+	if err != nil {
+		return s
+	}
+	return u.Redacted()
 }

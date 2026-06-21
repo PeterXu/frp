@@ -67,7 +67,7 @@ func TestHandshakeRoundTrip(t *testing.T) {
 		}
 	}()
 
-	if err := Handshake(server); err != nil {
+	if _, err := Handshake(server, false); err != nil {
 		t.Fatalf("Handshake err: %v", err)
 	}
 	if err := <-errCh; err != nil {
@@ -87,7 +87,7 @@ func TestHandshakeRejectsNoUserPassAuth(t *testing.T) {
 		io.ReadFull(client, buf)
 	}()
 
-	err := Handshake(server)
+	_, err := Handshake(server, false)
 	if err == nil {
 		t.Fatal("expected Handshake to fail when 0x02 not offered")
 	}
@@ -116,7 +116,7 @@ func TestAuthenticateRoundTrip(t *testing.T) {
 		}
 	}()
 
-	g, u, _, err := Authenticate(server, password)
+	g, u, _, err := Authenticate(server, 0x02, password)
 	if err != nil {
 		t.Fatalf("Authenticate err: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestAuthenticateWrongPassword(t *testing.T) {
 		io.ReadAll(client)
 	}()
 
-	_, _, _, err := Authenticate(server, "shared-secret")
+	_, _, _, err := Authenticate(server, 0x02, "shared-secret")
 	if err == nil {
 		t.Fatal("expected auth failure")
 	}
@@ -171,7 +171,7 @@ func TestAuthenticateEmptyUsernameOK(t *testing.T) {
 		}
 	}()
 
-	g, u, tgt, err := Authenticate(server, password)
+	g, u, tgt, err := Authenticate(server, 0x02, password)
 	if err != nil {
 		t.Fatalf("Authenticate err: %v", err)
 	}

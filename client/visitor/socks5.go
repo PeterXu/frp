@@ -96,7 +96,7 @@ func (sv *Socks5Visitor) handleConn(userConn net.Conn) {
 		} else {
 			xl.Debugf("reject: no group (empty SOCKS5 username and no serverName configured)")
 			userConn.SetDeadline(time.Time{})
-			socks5.SendReply(userConn, 0x01)
+			_ = socks5.SendReply(userConn, 0x01) // best-effort: client is being notified of failure
 			return
 		}
 	}
@@ -116,7 +116,7 @@ func (sv *Socks5Visitor) handleConn(userConn net.Conn) {
 	frpsConn, err := sv.helper.ConnectServer()
 	if err != nil {
 		xl.Warnf("connect to frps error: %v", err)
-		socks5.SendReply(userConn, 0x01)
+		_ = socks5.SendReply(userConn, 0x01) // best-effort: client is being notified of failure
 		return
 	}
 	defer frpsConn.Close()
@@ -132,7 +132,7 @@ func (sv *Socks5Visitor) handleConn(userConn net.Conn) {
 	})
 	if err != nil {
 		xl.Warnf("send NewSocks5VisitorConn error: %v", err)
-		socks5.SendReply(userConn, 0x01)
+		_ = socks5.SendReply(userConn, 0x01) // best-effort: client is being notified of failure
 		return
 	}
 
@@ -140,18 +140,21 @@ func (sv *Socks5Visitor) handleConn(userConn net.Conn) {
 	var resp msg.NewSocks5VisitorConnResp
 	if err := frpsConn.ReadMsgInto(&resp); err != nil {
 		xl.Warnf("read NewSocks5VisitorConnResp error: %v", err)
-		socks5.SendReply(userConn, 0x01)
+		_ = socks5.SendReply(userConn, 0x01) // best-effort: client is being notified of failure
 		return
 	}
 	_ = frpsConn.SetReadDeadline(time.Time{})
 
 	if resp.Error != "" {
 		xl.Warnf("NewSocks5VisitorConn resp error: %s", resp.Error)
-		socks5.SendReply(userConn, 0x01)
+		_ = socks5.SendReply(userConn, 0x01) // best-effort: client is being notified of failure
 		return
 	}
 
-	socks5.SendReply(userConn, 0x00)
+	if err := socks5.SendReply(userConn, 0x00); err != nil {
+		xl.Debugf("send success reply: %v", err)
+		return
+	}
 	libio.Join(userConn, frpsConn)
 }
 

@@ -89,16 +89,23 @@ func Handshake(conn net.Conn, allowNoAuth bool) (method byte, err error) {
 	// Only fall back to no-auth (0x00) when client does not support 0x02 and
 	// allowNoAuth is true (for clients without username like "curl -x socks5h://host:port").
 	if hasUserPassAuth {
-		conn.Write([]byte{0x05, 0x02})
+		if _, err := conn.Write([]byte{0x05, 0x02}); err != nil {
+			return 0, fmt.Errorf("send method selection: %w", err)
+		}
 		return 0x02, nil
 	}
 
 	if allowNoAuth && hasNoAuth {
-		conn.Write([]byte{0x05, 0x00})
+		if _, err := conn.Write([]byte{0x05, 0x00}); err != nil {
+			return 0, fmt.Errorf("send method selection: %w", err)
+		}
 		return 0x00, nil
 	}
 
-	conn.Write([]byte{0x05, 0xFF})
+	if _, err := conn.Write([]byte{0x05, 0xFF}); err != nil {
+		conn.Close()
+		return 0, fmt.Errorf("send method rejection: %w", err)
+	}
 	conn.Close()
 	return 0, fmt.Errorf("client does not support username/password auth")
 }
@@ -139,17 +146,19 @@ func Authenticate(conn net.Conn, method byte, expectedPassword string) (group, u
 	if expectedPassword == "" {
 		// When expectedPassword is empty, accept empty password only
 		if len(password) != 0 {
-			conn.Write([]byte{0x01, 0x01})
-			return "", "", "", fmt.Errorf("auth failed: expected empty password but got non-empty for user [%s]", string(username))
+			authErr := fmt.Errorf("auth failed: expected empty password but got non-empty for user [%s]", string(username))
+			return "", "", "", authFailureWithReply(conn, authErr)
 		}
 	} else {
 		if subtle.ConstantTimeCompare(password, []byte(expectedPassword)) != 1 {
-			conn.Write([]byte{0x01, 0x01})
-			return "", "", "", fmt.Errorf("auth failed for user [%s]", string(username))
+			authErr := fmt.Errorf("auth failed for user [%s]", string(username))
+			return "", "", "", authFailureWithReply(conn, authErr)
 		}
 	}
 
-	conn.Write([]byte{0x01, 0x00})
+	if _, err := conn.Write([]byte{0x01, 0x00}); err != nil {
+		return "", "", "", fmt.Errorf("send auth success: %w", err)
+	}
 
 	// Empty username is allowed: the caller may use a static fallback (e.g.
 	// visitor's ServerName) when no routing info was supplied by the client.
@@ -162,6 +171,17 @@ func Authenticate(conn net.Conn, method byte, expectedPassword string) (group, u
 		return "", "", "", err
 	}
 	return group, userID, targetUser, nil
+}
+
+// authFailureWithReply best-effort sends the SOCKS5 auth-failure reply (0x01 0x01)
+// and returns the primary auth error. If the reply write fails, it is folded into
+// the returned error so it is never lost — but the auth-failure reason stays
+// primary, so callers logging it still see which identity failed authentication.
+func authFailureWithReply(conn net.Conn, authErr error) error {
+	if _, werr := conn.Write([]byte{0x01, 0x01}); werr != nil {
+		return fmt.Errorf("%w (also failed to send failure reply: %v)", authErr, werr)
+	}
+	return authErr
 }
 
 // ReadConnectRequest reads a SOCKS5 CONNECT request and returns the target
@@ -217,7 +237,10 @@ func ReadConnectRequest(conn net.Conn) (string, uint16, error) {
 
 // SendReply sends a SOCKS5 reply with the given reply code (rep byte).
 // Uses a fixed BND.ADDR=0.0.0.0 / BND.PORT=0 — matches existing frps behavior.
-func SendReply(conn net.Conn, rep byte) {
+// Returns the write error so callers can react — e.g. skip relaying when the
+// success reply never reached the client, avoiding a desynced tunnel.
+func SendReply(conn net.Conn, rep byte) error {
 	reply := []byte{0x05, rep, 0x00, 0x01, 0, 0, 0, 0, 0, 0}
-	conn.Write(reply)
+	_, err := conn.Write(reply)
+	return err
 }
