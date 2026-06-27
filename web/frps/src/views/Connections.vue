@@ -261,6 +261,7 @@ const connectionStats = computed(() => {
 
 const protocolLabel = (protocol: string): string => {
   if (protocol === 'socks5') return 'SOCKS5'
+  if (protocol === 'socks5_visitor') return 'SOCKS5 VISITOR'
   return 'HTTP CONNECT'
 }
 

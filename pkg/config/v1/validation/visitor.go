@@ -33,9 +33,18 @@ func ValidateVisitorConfigurer(c v1.VisitorConfigurer) error {
 	case *v1.SUDPVisitorConfig:
 	case *v1.XTCPVisitorConfig:
 		return validateXTCPVisitorConfig(v)
+	case *v1.Socks5VisitorConfig:
+		return validateSocks5VisitorConfig(v)
 	default:
 		return errors.New("unknown visitor config type")
 	}
+	return nil
+}
+
+func validateSocks5VisitorConfig(c *v1.Socks5VisitorConfig) error {
+	// authPassword can be empty. When empty, no-auth method (0x00) is allowed
+	// during SOCKS5 handshake, and empty password is sent to frps (for forward
+	// compatibility only; frpc2 currently does not verify it).
 	return nil
 }
 

@@ -108,6 +108,11 @@ func NewVisitor(
 			cfg:          cfg,
 			checkCloseCh: make(chan struct{}),
 		}
+	case *v1.Socks5VisitorConfig:
+		visitor = &Socks5Visitor{
+			BaseVisitor: &baseVisitor,
+			cfg:         cfg,
+		}
 	}
 	return visitor, nil
 }

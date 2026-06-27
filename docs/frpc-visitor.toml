@@ -25,7 +25,7 @@ serverPort = 7000
 loginFailExit = false
 
 # console or real logFile path like ./frpc.log
-log.to = "/var/log/frp/frpc.log"
+log.to = "/var/log/frp/frpc_visitor.log"
 # trace, debug, info, warn, error
 log.level = "info"
 log.maxDays = 3
@@ -489,13 +489,13 @@ udpPacketSize = 1300
 # --- socks5_relay: SOCKS5 exit node for frps routing ---------------------------
 # frpc registers as a SOCKS5 exit node; frps routes SOCKS5 requests to it
 # based on user/group membership. Group comes from global 'group' or TLS cert OU.
-[[proxies]]
-name = "relay5"
-type = "socks5_relay"
+#[[proxies]]
+#name = "relay5"
+#type = "socks5_relay"
 # outboundProxy = "optional-outbound-proxy-name"
 # Token pool size: requests wait (block) when limit reached until a token is released
 # 0 = unlimited, recommended: 3-10 for typical usage
-maxConcurrent = 30
+#maxConcurrent = 30
 
 
 # ============================================================================
@@ -570,13 +570,13 @@ maxConcurrent = 30
 #   group=targetUser   -> direct targeting (pin to a specific frpc2)
 # When the SOCKS5 client supplies no username, serverName (and optional
 # serverUser) are used as a static fallback.
-#[[visitors]]
-#name = "socks5_entry"
-#type = "socks5"
-#bindAddr = "127.0.0.1"
-#bindPort = 1080
-#authPassword = "shared-secret"
-# serverName = "group"    # static fallback group when SOCKS5 username is empty
+[[visitors]]
+name = "socks5_entry"
+type = "socks5"
+bindAddr = "127.0.0.1"
+bindPort = 5080
+authPassword = "pass"
+serverName = "unknown"    # static fallback group when SOCKS5 username is empty
 # serverUser = "host-b"   # optional: pin to a specific frpc2 (direct targeting)
 # maxConcurrent = 50      # optional: cap concurrent SOCKS5 client conns (0 = unlimited)
 

@@ -658,6 +658,14 @@ func (svr *Service) handleConnection(ctx context.Context, conn net.Conn, interna
 				Error:     "",
 			})
 		}
+	case *msg.NewSocks5VisitorConn:
+		selectFn := svr.makeSelectFrpcFn()
+		go func() {
+			if err := socks5proxy.HandleNewSocks5VisitorConn(xl, acceptedConn.conn, m, selectFn, svr.connTracker); err != nil {
+				xl.Debugf("handle NewSocks5VisitorConn: %v", err)
+			}
+			conn.Close()
+		}()
 	default:
 		log.Warnf("error message type for the new connection [%s]", conn.RemoteAddr().String())
 		conn.Close()
