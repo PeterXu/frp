@@ -7,6 +7,7 @@ import ProxyDetail from '../views/ProxyDetail.vue'
 import Socks5Relay from '../views/Socks5Relay.vue'
 import Topology from '../views/Topology.vue'
 import Connections from '../views/Connections.vue'
+import TransportConnections from '../views/TransportConnections.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -53,6 +54,11 @@ const router = createRouter({
       path: '/connections',
       name: 'Connections',
       component: Connections,
+    },
+    {
+      path: '/transport',
+      name: 'TransportConnections',
+      component: TransportConnections,
     },
   ],
 })

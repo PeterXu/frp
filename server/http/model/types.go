@@ -192,3 +192,37 @@ type GetProxyTrafficResp struct {
 	TrafficIn  []int64 `json:"trafficIn"`
 	TrafficOut []int64 `json:"trafficOut"`
 }
+
+// /api/transport/stats — frpc<->frps connection counts broken down by type.
+//
+// Control counts login (control) connections (= online clients). Work is split
+// into in-use (currently relaying a proxied connection) and idle (pooled for
+// reuse). VisitorListeners is the number of registered visitor endpoints
+// (stcp/xtcp/sudp); active visitor streams are not tracked today. Socks5 counts
+// active SOCKS5/HTTP-CONNECT relay connections (incl. socks5 visitors).
+type TransportStatsResp struct {
+	Control          int64                `json:"control"`
+	WorkInUse        int64                `json:"workInUse"`
+	WorkIdle         int64                `json:"workIdle"`
+	VisitorListeners int64                `json:"visitorListeners"`
+	Socks5           int64                `json:"socks5"`
+	Clients          []TransportClientRow `json:"clients"`
+}
+
+// TransportClientRow attributes transport connection counts to a single frpc.
+// WorkInUse attribution is best-effort by ClientID (fallback RunID/User).
+type TransportClientRow struct {
+	Key          string `json:"key"`
+	User         string `json:"user,omitempty"`
+	ClientID     string `json:"clientID,omitempty"`
+	RunID        string `json:"runID,omitempty"`
+	IP           string `json:"ip,omitempty"`
+	Version      string `json:"version,omitempty"`
+	WireProtocol string `json:"wireProtocol,omitempty"`
+	Online       bool   `json:"online"`
+	Control      int64  `json:"control"`
+	WorkIdle     int64  `json:"workIdle"`
+	WorkInUse    int64  `json:"workInUse"`
+	Socks5       int64  `json:"socks5"`
+	ConnectedAt  int64  `json:"connectedAt"`
+}

@@ -104,3 +104,12 @@ func (vm *Manager) CloseListener(name string) {
 
 	delete(vm.listeners, name)
 }
+
+// Count returns the number of registered visitor listeners. This is the count
+// of visitor-capable endpoints (e.g. stcp/xtcp/sudp) currently accepting
+// visitor streams, not the number of active streams flowing through them.
+func (vm *Manager) Count() int {
+	vm.mu.RLock()
+	defer vm.mu.RUnlock()
+	return len(vm.listeners)
+}

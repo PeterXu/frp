@@ -82,6 +82,16 @@ func (cm *ControlManager) GetByID(runID string) (ctl *Control, ok bool) {
 	return
 }
 
+// ForEach invokes fn for every active control while holding the read lock.
+// fn must not block on control lifecycle operations (e.g. Close/GetWorkConn).
+func (cm *ControlManager) ForEach(fn func(runID string, ctl *Control)) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	for runID, ctl := range cm.ctlsByRunID {
+		fn(runID, ctl)
+	}
+}
+
 func (cm *ControlManager) Close() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -261,6 +271,15 @@ func (ctl *Control) GetWorkConn() (workConn *proxy.WorkConn, err error) {
 	// When we get a work connection from pool, replace it with a new one.
 	_ = ctl.msgDispatcher.Send(&msg.ReqWorkConn{})
 	return
+}
+
+// IdleWorkConnCount returns the number of pooled work connections currently
+// buffered for reuse on this control (length of the workConnCh pool). Exposed
+// for the dashboard transport-connections view.
+func (ctl *Control) IdleWorkConnCount() int {
+	ctl.mu.RLock()
+	defer ctl.mu.RUnlock()
+	return len(ctl.workConnCh)
 }
 
 func (ctl *Control) heartbeatWorker() {

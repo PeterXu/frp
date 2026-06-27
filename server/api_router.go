@@ -25,6 +25,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/fatedier/frp/pkg/metrics/mem"
 	"github.com/fatedier/frp/pkg/msg"
 	httppkg "github.com/fatedier/frp/pkg/util/http"
 	netpkg "github.com/fatedier/frp/pkg/util/net"
@@ -64,6 +65,7 @@ func (svr *Service) registerRouteHandlers(helper *httppkg.RouterRegisterHelper) 
 	subRouter.HandleFunc("/api/socks5relay/events", svr.apiSocks5RelayEvents).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/retention", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayRetention)).Methods("GET")
 	subRouter.HandleFunc("/api/socks5relay/retention", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelaySetRetention)).Methods("PUT")
+	subRouter.HandleFunc("/api/transport/stats", httppkg.MakeHTTPHandlerFunc(svr.apiTransportStats)).Methods("GET")
 	subRouter.HandleFunc("/api/reload_tls", httppkg.MakeHTTPHandlerFunc(svr.apiReloadTLS)).Methods("POST")
 	// socks5relay disable/enable routes
 	subRouter.HandleFunc("/api/socks5relay/group/{group}/disable", httppkg.MakeHTTPHandlerFunc(svr.apiSocks5RelayGroupDisable)).Methods("PUT")
@@ -177,6 +179,89 @@ func (svr *Service) apiSocks5RelayStats(ctx *httppkg.Context) (any, error) {
 		stats.TotalBytesOut += c.BytesOut
 	}
 	return stats, nil
+}
+
+// apiTransportStats reports frpc<->frps connection counts broken down by type
+// (control / work in-use / work idle / visitor listeners / socks5) plus a
+// per-client breakdown. See model.TransportStatsResp for the semantics of each
+// field and its data source.
+func (svr *Service) apiTransportStats(ctx *httppkg.Context) (any, error) {
+	serverStats := mem.StatsCollector.GetServer()
+
+	// Work-in-use attributed per client by metrics ClientID (fallback User).
+	inUseByClient := make(map[string]int64)
+	for proxyType := range serverStats.ProxyTypeCounts {
+		for _, ps := range mem.StatsCollector.GetProxiesByType(proxyType) {
+			key := ps.ClientID
+			if key == "" {
+				key = ps.User
+			}
+			if key == "" {
+				continue
+			}
+			inUseByClient[key] += ps.CurConns
+		}
+	}
+
+	// Idle pooled work connections, attributed per control (runID).
+	var workIdle int64
+	idleByRunID := make(map[string]int64)
+	svr.ctlManager.ForEach(func(runID string, ctl *Control) {
+		n := int64(ctl.IdleWorkConnCount())
+		idleByRunID[runID] = n
+		workIdle += n
+	})
+
+	// Active SOCKS5 relay connections, attributed per runID.
+	socks5Conns := svr.connTracker.GetAll()
+	socks5ByRunID := make(map[string]int64)
+	for _, c := range socks5Conns {
+		if c.RunID != "" {
+			socks5ByRunID[c.RunID]++
+		}
+	}
+
+	// Per-client rows from the registry, joined to the maps above.
+	records := svr.clientRegistry.List()
+	rows := make([]model.TransportClientRow, 0, len(records))
+	for _, info := range records {
+		var workInUse int64
+		if key := info.ClientID(); key != "" {
+			workInUse = inUseByClient[key]
+		}
+		var control int64
+		if info.Online {
+			control = 1
+		}
+		connectedAt := int64(0)
+		if !info.FirstConnectedAt.IsZero() {
+			connectedAt = info.FirstConnectedAt.Unix()
+		}
+		rows = append(rows, model.TransportClientRow{
+			Key:          info.Key,
+			User:         info.User,
+			ClientID:     info.ClientID(),
+			RunID:        info.RunID,
+			IP:           info.IP,
+			Version:      info.Version,
+			WireProtocol: info.WireProtocol,
+			Online:       info.Online,
+			Control:      control,
+			WorkIdle:     idleByRunID[info.RunID],
+			WorkInUse:    workInUse,
+			Socks5:       socks5ByRunID[info.RunID],
+			ConnectedAt:  connectedAt,
+		})
+	}
+
+	return model.TransportStatsResp{
+		Control:          serverStats.ClientCounts,
+		WorkInUse:        serverStats.CurConns,
+		WorkIdle:         workIdle,
+		VisitorListeners: int64(svr.rc.VisitorManager.Count()),
+		Socks5:           int64(len(socks5Conns)),
+		Clients:          rows,
+	}, nil
 }
 
 func (svr *Service) apiSocks5RelayRetention(ctx *httppkg.Context) (any, error) {
